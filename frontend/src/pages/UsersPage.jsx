@@ -147,6 +147,12 @@ export const UsersPage = () => {
       return;
     }
 
+    // Check domain restriction
+    if (isExternalEmail && !externalDomainApproved) {
+      toast.error("External domain requires admin approval. Please check the approval box.");
+      return;
+    }
+
     setIsSaving(true);
     try {
       const created = await usersAPI.create(newUser);
