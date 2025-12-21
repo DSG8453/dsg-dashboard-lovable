@@ -54,6 +54,7 @@ import {
   Check,
   Eye,
   EyeOff,
+  AlertTriangle,
 } from "lucide-react";
 
 import { useSupport } from "@/context/SupportContext";
@@ -64,6 +65,20 @@ const accessLevels = [
   { value: "limited", label: "Limited", description: "Selected tools only" },
   { value: "readonly", label: "Read Only", description: "View only, no actions" },
 ];
+
+// Approved company domains
+const APPROVED_DOMAINS = [
+  "dsgtransport.net",
+  "teamdsgtransport.com",
+  "dsgtransport.com",
+];
+
+// Check if email domain is approved
+const isApprovedDomain = (email) => {
+  if (!email || !email.includes("@")) return false;
+  const domain = email.split("@")[1]?.toLowerCase();
+  return APPROVED_DOMAINS.includes(domain);
+};
 
 export const UsersPage = () => {
   const { settings, getWhatsAppLink } = useSupport();
@@ -79,6 +94,7 @@ export const UsersPage = () => {
   const [copied, setCopied] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [externalDomainApproved, setExternalDomainApproved] = useState(false);
   const [newUser, setNewUser] = useState({ 
     name: "", 
     email: "", 
@@ -88,6 +104,9 @@ export const UsersPage = () => {
     access_level: "standard" 
   });
   const [editUser, setEditUser] = useState(null);
+
+  // Check if current email is external (non-approved domain)
+  const isExternalEmail = newUser.email && newUser.email.includes("@") && !isApprovedDomain(newUser.email);
 
   // Generate random password
   const generatePassword = () => {
