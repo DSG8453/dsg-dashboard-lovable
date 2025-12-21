@@ -1,194 +1,147 @@
-import { createContext, useContext, useState, useEffect } from "react";
+import { createContext, useContext, useState, useEffect, useCallback } from "react";
+import { issuesAPI, settingsAPI } from "@/services/api";
 
 const SupportContext = createContext(null);
 
 const defaultSettings = {
-  whatsappNumber: "+1234567890",
-  supportEmail: "support@dsgtransport.com",
-  businessHours: "Mon-Fri 9AM-6PM EST",
+  whatsapp_number: "+1234567890",
+  support_email: "support@dsgtransport.com",
+  business_hours: "Mon-Fri 9AM-6PM EST",
 };
-
-const initialIssues = [
-  {
-    id: 1,
-    userId: 2,
-    userName: "John Smith",
-    userEmail: "john.smith@dsgtransport.com",
-    title: "Cannot access Zoho Assist",
-    description: "Getting 403 error when trying to launch Zoho Assist tool. Credentials are saved but launch fails.",
-    status: "open",
-    priority: "high",
-    category: "tool_access",
-    createdAt: "2025-12-20T10:30:00Z",
-    aiAnalysis: null,
-    adminNotes: "",
-    resolution: null,
-  },
-  {
-    id: 2,
-    userId: 3,
-    userName: "Sarah Johnson",
-    userEmail: "sarah.johnson@dsgtransport.com",
-    title: "Dashboard loading slowly",
-    description: "The dashboard takes more than 10 seconds to load after login. Other pages work fine.",
-    status: "in_progress",
-    priority: "medium",
-    category: "performance",
-    createdAt: "2025-12-19T14:15:00Z",
-    aiAnalysis: {
-      diagnosis: "Performance issue likely caused by large number of tool cards rendering simultaneously.",
-      suggestedFix: "Implement lazy loading for tool cards and add pagination for users with many tools.",
-      confidence: 0.85,
-      analyzedAt: "2025-12-19T14:20:00Z",
-    },
-    adminNotes: "Investigating performance optimizations",
-    resolution: null,
-  },
-];
 
 export const SupportProvider = ({ children }) => {
   const [settings, setSettings] = useState(defaultSettings);
-  const [issues, setIssues] = useState(initialIssues);
+  const [issues, setIssues] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    const savedSettings = localStorage.getItem("dsg_support_settings");
-    const savedIssues = localStorage.getItem("dsg_support_issues");
-    
-    if (savedSettings) {
-      setSettings(JSON.parse(savedSettings));
+  // Fetch settings and issues on mount
+  const fetchData = useCallback(async () => {
+    try {
+      // Fetch settings
+      try {
+        const settingsData = await settingsAPI.getSupport();
+        setSettings(settingsData);
+      } catch {
+        console.log("Using default settings");
+      }
+
+      // Fetch issues
+      try {
+        const issuesData = await issuesAPI.getAll();
+        setIssues(issuesData);
+      } catch {
+        console.log("Failed to fetch issues");
+      }
+    } finally {
+      setIsLoading(false);
     }
-    if (savedIssues) {
-      setIssues(JSON.parse(savedIssues));
-    }
-    setIsLoading(false);
   }, []);
 
+  useEffect(() => {
+    // Only fetch if user is logged in
+    const token = localStorage.getItem("dsg_token");
+    if (token) {
+      fetchData();
+    } else {
+      setIsLoading(false);
+    }
+  }, [fetchData]);
+
   // Save settings
-  const updateSettings = (newSettings) => {
-    const updated = { ...settings, ...newSettings };
-    setSettings(updated);
-    localStorage.setItem("dsg_support_settings", JSON.stringify(updated));
+  const updateSettings = async (newSettings) => {
+    try {
+      const updated = await settingsAPI.updateSupport(newSettings);
+      setSettings(updated);
+      return updated;
+    } catch (error) {
+      console.error("Failed to update settings:", error);
+      throw error;
+    }
   };
 
   // Report new issue
-  const reportIssue = (issue, user) => {
-    const newIssue = {
-      id: Date.now(),
-      userId: user.id,
-      userName: user.name,
-      userEmail: user.email,
-      ...issue,
-      status: "open",
-      createdAt: new Date().toISOString(),
-      aiAnalysis: null,
-      adminNotes: "",
-      resolution: null,
-    };
-    
-    const updated = [newIssue, ...issues];
-    setIssues(updated);
-    localStorage.setItem("dsg_support_issues", JSON.stringify(updated));
-    return newIssue;
+  const reportIssue = async (issueData) => {
+    try {
+      const newIssue = await issuesAPI.create(issueData);
+      setIssues([newIssue, ...issues]);
+      return newIssue;
+    } catch (error) {
+      console.error("Failed to report issue:", error);
+      throw error;
+    }
   };
 
   // Send to Emergent AI for analysis
   const analyzeWithAI = async (issueId) => {
-    // Simulate AI analysis
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-    
-    const issue = issues.find((i) => i.id === issueId);
-    if (!issue) return null;
-
-    // Mock AI responses based on category
-    const aiResponses = {
-      tool_access: {
-        diagnosis: `Access issue detected for ${issue.userName}. This could be caused by: 1) Expired credentials, 2) IP whitelist restrictions, 3) Tool-specific permission settings.`,
-        suggestedFix: "1. Verify user's saved credentials are current\n2. Check if user's IP is whitelisted\n3. Confirm tool permissions in admin panel\n4. Clear browser cache and retry",
-        confidence: 0.88,
-      },
-      performance: {
-        diagnosis: "Performance degradation identified. Possible causes: Network latency, browser cache issues, or heavy DOM rendering.",
-        suggestedFix: "1. Implement virtualized list rendering\n2. Add loading states for async operations\n3. Enable browser caching for static assets\n4. Consider pagination for large datasets",
-        confidence: 0.82,
-      },
-      login: {
-        diagnosis: "Authentication issue detected. Could be session expiration, SSO configuration, or credential mismatch.",
-        suggestedFix: "1. Reset user's password\n2. Clear session storage\n3. Verify SSO provider connection\n4. Check for account lockout status",
-        confidence: 0.90,
-      },
-      ui_bug: {
-        diagnosis: "UI rendering issue reported. May be caused by CSS conflicts, JavaScript errors, or responsive design issues.",
-        suggestedFix: "1. Check browser console for errors\n2. Test in different browsers\n3. Clear cache and hard refresh\n4. Review recent UI changes for conflicts",
-        confidence: 0.75,
-      },
-      other: {
-        diagnosis: "Issue requires manual investigation. Insufficient data for automated diagnosis.",
-        suggestedFix: "1. Gather more details from user\n2. Check system logs\n3. Review recent changes\n4. Escalate to development team if needed",
-        confidence: 0.60,
-      },
-    };
-
-    const analysis = aiResponses[issue.category] || aiResponses.other;
-    
-    const aiAnalysis = {
-      ...analysis,
-      analyzedAt: new Date().toISOString(),
-    };
-
-    const updated = issues.map((i) =>
-      i.id === issueId ? { ...i, aiAnalysis, status: "analyzed" } : i
-    );
-    setIssues(updated);
-    localStorage.setItem("dsg_support_issues", JSON.stringify(updated));
-    
-    return aiAnalysis;
+    try {
+      const analysis = await issuesAPI.analyze(issueId);
+      // Update local state
+      setIssues(issues.map((i) =>
+        i.id === issueId ? { ...i, ai_analysis: analysis, status: "analyzed" } : i
+      ));
+      return analysis;
+    } catch (error) {
+      console.error("Failed to analyze issue:", error);
+      throw error;
+    }
   };
 
   // Update issue
-  const updateIssue = (issueId, updates) => {
-    const updated = issues.map((i) =>
-      i.id === issueId ? { ...i, ...updates } : i
-    );
-    setIssues(updated);
-    localStorage.setItem("dsg_support_issues", JSON.stringify(updated));
+  const updateIssue = async (issueId, updates) => {
+    try {
+      const updated = await issuesAPI.update(issueId, updates);
+      setIssues(issues.map((i) => i.id === issueId ? { ...i, ...updated } : i));
+      return updated;
+    } catch (error) {
+      console.error("Failed to update issue:", error);
+      throw error;
+    }
   };
 
   // Resolve issue and notify user
-  const resolveIssue = (issueId, resolution) => {
-    const updated = issues.map((i) =>
-      i.id === issueId
-        ? {
-            ...i,
-            status: "resolved",
-            resolution: {
-              ...resolution,
-              resolvedAt: new Date().toISOString(),
-            },
-          }
-        : i
-    );
-    setIssues(updated);
-    localStorage.setItem("dsg_support_issues", JSON.stringify(updated));
+  const resolveIssue = async (issueId, note) => {
+    try {
+      await issuesAPI.resolve(issueId, note);
+      setIssues(issues.map((i) =>
+        i.id === issueId ? { ...i, status: "resolved" } : i
+      ));
+    } catch (error) {
+      console.error("Failed to resolve issue:", error);
+      throw error;
+    }
   };
 
   // Delete issue
-  const deleteIssue = (issueId) => {
-    const updated = issues.filter((i) => i.id !== issueId);
-    setIssues(updated);
-    localStorage.setItem("dsg_support_issues", JSON.stringify(updated));
+  const deleteIssue = async (issueId) => {
+    try {
+      await issuesAPI.delete(issueId);
+      setIssues(issues.filter((i) => i.id !== issueId));
+    } catch (error) {
+      console.error("Failed to delete issue:", error);
+      throw error;
+    }
   };
 
   // Get issues for a specific user
   const getUserIssues = (userId) => {
-    return issues.filter((i) => i.userId === userId);
+    return issues.filter((i) => i.user_id === userId);
   };
 
   // Get WhatsApp link
   const getWhatsAppLink = (message = "") => {
-    const phone = settings.whatsappNumber.replace(/[^0-9]/g, "");
+    const phone = settings.whatsapp_number.replace(/[^0-9]/g, "");
     const encodedMessage = encodeURIComponent(message);
     return `https://wa.me/${phone}${message ? `?text=${encodedMessage}` : ""}`;
+  };
+
+  // Refresh issues
+  const refreshIssues = async () => {
+    try {
+      const issuesData = await issuesAPI.getAll();
+      setIssues(issuesData);
+    } catch (error) {
+      console.error("Failed to refresh issues:", error);
+    }
   };
 
   const value = {
@@ -203,6 +156,7 @@ export const SupportProvider = ({ children }) => {
     deleteIssue,
     getUserIssues,
     getWhatsAppLink,
+    refreshIssues,
   };
 
   return <SupportContext.Provider value={value}>{children}</SupportContext.Provider>;
