@@ -23,6 +23,7 @@ import {
   LogOut,
   Menu,
   ChevronDown,
+  HeadphonesIcon,
 } from "lucide-react";
 
 const navigation = [
@@ -35,10 +36,18 @@ const navigation = [
   { name: "Activity Logs", href: "/activity-logs", icon: FileText },
 ];
 
+// Admin-only navigation items
+const adminNavigation = [
+  { name: "Support", href: "/support", icon: HeadphonesIcon },
+];
+
 export const Navbar = ({ currentUser }) => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const { logout } = useAuth();
   const navigate = useNavigate();
+
+  const isAdmin = currentUser?.role === "Administrator";
+  const allNavigation = isAdmin ? [...navigation, ...adminNavigation] : navigation;
 
   const handleLogout = () => {
     logout();
@@ -60,7 +69,7 @@ export const Navbar = ({ currentUser }) => {
 
           {/* Desktop Navigation */}
           <div className="hidden lg:flex items-center gap-1">
-            {navigation.map((item) => (
+            {allNavigation.map((item) => (
               <NavLink key={item.name} to={item.href}>
                 {({ isActive }) => (
                   <Button
@@ -109,6 +118,12 @@ export const Navbar = ({ currentUser }) => {
                   <User className="mr-2 h-4 w-4" />
                   Profile
                 </DropdownMenuItem>
+                {isAdmin && (
+                  <DropdownMenuItem onClick={() => navigate("/support")}>
+                    <HeadphonesIcon className="mr-2 h-4 w-4" />
+                    Support Management
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onClick={handleLogout}
@@ -142,7 +157,7 @@ export const Navbar = ({ currentUser }) => {
                   </div>
 
                   <nav className="flex flex-col gap-1">
-                    {navigation.map((item) => (
+                    {allNavigation.map((item) => (
                       <NavLink
                         key={item.name}
                         to={item.href}

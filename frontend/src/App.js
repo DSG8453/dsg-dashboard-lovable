@@ -2,9 +2,11 @@ import "@/App.css";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
+import { SupportProvider } from "@/context/SupportContext";
 
 // Layout Components
 import { Navbar } from "@/components/layout/Navbar";
+import { WhatsAppSupport } from "@/components/support/WhatsAppSupport";
 
 // Page Components
 import { LoginPage } from "@/pages/LoginPage";
@@ -15,6 +17,7 @@ import { CredentialsPage } from "@/pages/CredentialsPage";
 import { IPManagementPage } from "@/pages/IPManagementPage";
 import { DevicesPage } from "@/pages/DevicesPage";
 import { ActivityLogsPage } from "@/pages/ActivityLogsPage";
+import { SupportManagementPage } from "@/pages/SupportManagementPage";
 
 // Protected Route Component
 const ProtectedRoute = ({ children }) => {
@@ -48,6 +51,7 @@ const AuthenticatedLayout = ({ children }) => {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {children}
       </main>
+      <WhatsAppSupport />
     </div>
   );
 };
@@ -131,6 +135,16 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/support"
+        element={
+          <ProtectedRoute>
+            <AuthenticatedLayout>
+              <SupportManagementPage />
+            </AuthenticatedLayout>
+          </ProtectedRoute>
+        }
+      />
 
       {/* Catch all - redirect to dashboard */}
       <Route path="*" element={<Navigate to="/" replace />} />
@@ -142,8 +156,10 @@ function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <AppRoutes />
-        <Toaster position="top-right" richColors />
+        <SupportProvider>
+          <AppRoutes />
+          <Toaster position="top-right" richColors />
+        </SupportProvider>
       </AuthProvider>
     </BrowserRouter>
   );
