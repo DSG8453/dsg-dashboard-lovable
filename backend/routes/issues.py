@@ -59,9 +59,22 @@ async def create_issue(issue_data: IssueCreate, current_user: dict = Depends(get
     }
     
     result = await db.issues.insert_one(new_issue)
-    new_issue["id"] = str(result.inserted_id)
     
-    return new_issue
+    return {
+        "id": str(result.inserted_id),
+        "user_id": current_user["id"],
+        "user_name": current_user["name"],
+        "user_email": current_user["email"],
+        "title": issue_data.title,
+        "description": issue_data.description,
+        "category": issue_data.category,
+        "priority": issue_data.priority.value,
+        "status": "open",
+        "created_at": now,
+        "ai_analysis": None,
+        "admin_notes": "",
+        "resolution": None
+    }
 
 @router.get("/{issue_id}", response_model=dict)
 async def get_issue(issue_id: str, current_user: dict = Depends(get_current_user)):
