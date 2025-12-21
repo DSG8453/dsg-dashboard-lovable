@@ -1,51 +1,45 @@
-import { useEffect } from "react";
+import { useState } from "react";
 import "@/App.css";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import axios from "axios";
+import { Toaster } from "@/components/ui/sonner";
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
+// Layout Components
+import { Navbar } from "@/components/layout/Navbar";
 
-const Home = () => {
-  const helloWorldApi = async () => {
-    try {
-      const response = await axios.get(`${API}/`);
-      console.log(response.data.message);
-    } catch (e) {
-      console.error(e, `errored out requesting / api`);
-    }
-  };
-
-  useEffect(() => {
-    helloWorldApi();
-  }, []);
-
-  return (
-    <div>
-      <header className="App-header">
-        <a
-          className="App-link"
-          href="https://emergent.sh"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <img src="https://avatars.githubusercontent.com/in/1201222?s=120&u=2686cf91179bbafbc7a71bfbc43004cf9ae1acea&v=4" />
-        </a>
-        <p className="mt-5">Building something incredible ~!</p>
-      </header>
-    </div>
-  );
-};
+// Page Components
+import { DashboardPage } from "@/pages/DashboardPage";
+import { ProfilePage } from "@/pages/ProfilePage";
+import { UsersPage } from "@/pages/UsersPage";
+import { CredentialsPage } from "@/pages/CredentialsPage";
+import { IPManagementPage } from "@/pages/IPManagementPage";
+import { DevicesPage } from "@/pages/DevicesPage";
+import { ActivityLogsPage } from "@/pages/ActivityLogsPage";
 
 function App() {
+  const [currentUser] = useState({
+    name: "Admin User",
+    email: "admin@dsgtransport.com",
+    role: "Administrator",
+    initials: "AU",
+    joinedDate: "December 21, 2025",
+  });
+
   return (
-    <div className="App">
+    <div className="min-h-screen bg-gradient-dsg">
       <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Home />}>
-            <Route index element={<Home />} />
-          </Route>
-        </Routes>
+        <Navbar currentUser={currentUser} />
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          <Routes>
+            <Route path="/" element={<DashboardPage currentUser={currentUser} />} />
+            <Route path="/profile" element={<ProfilePage currentUser={currentUser} />} />
+            <Route path="/users" element={<UsersPage />} />
+            <Route path="/credentials" element={<CredentialsPage />} />
+            <Route path="/ip-management" element={<IPManagementPage />} />
+            <Route path="/devices" element={<DevicesPage />} />
+            <Route path="/activity-logs" element={<ActivityLogsPage />} />
+          </Routes>
+        </main>
+        <Toaster position="top-right" richColors />
       </BrowserRouter>
     </div>
   );
