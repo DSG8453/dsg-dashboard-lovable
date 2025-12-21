@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,6 +37,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
+import { usersAPI } from "@/services/api";
 import {
   Search,
   UserPlus,
@@ -45,70 +46,10 @@ import {
   MoreVertical,
   Shield,
   Ban,
-  RefreshCw,
   Mail,
   UserCheck,
-  UserX,
-  Settings,
+  Loader2,
 } from "lucide-react";
-
-const initialUsers = [
-  {
-    id: 1,
-    name: "Admin User",
-    email: "admin@dsgtransport.com",
-    role: "Admin",
-    status: "Active",
-    initials: "AU",
-    accessLevel: "full",
-    lastActive: "Just now",
-    invitedAt: "Dec 1, 2025",
-  },
-  {
-    id: 2,
-    name: "John Smith",
-    email: "john.smith@dsgtransport.com",
-    role: "User",
-    status: "Active",
-    initials: "JS",
-    accessLevel: "standard",
-    lastActive: "2 hours ago",
-    invitedAt: "Dec 5, 2025",
-  },
-  {
-    id: 3,
-    name: "Sarah Johnson",
-    email: "sarah.johnson@dsgtransport.com",
-    role: "User",
-    status: "Active",
-    initials: "SJ",
-    accessLevel: "standard",
-    lastActive: "1 day ago",
-    invitedAt: "Dec 8, 2025",
-  },
-  {
-    id: 4,
-    name: "Mike Davis",
-    email: "mike.davis@dsgtransport.com",
-    role: "User",
-    status: "Suspended",
-    initials: "MD",
-    accessLevel: "limited",
-    lastActive: "3 days ago",
-    invitedAt: "Dec 10, 2025",
-  },
-  {
-    id: 5,
-    name: "Emily Brown",
-    email: "emily.brown@dsgtransport.com",
-    role: "User",
-    status: "Pending",
-    initials: "EB",
-    accessLevel: "standard",
-    lastActive: "Never",
-    invitedAt: "Dec 18, 2025",
-  },
-];
 
 const accessLevels = [
   { value: "full", label: "Full Access", description: "All tools and admin features" },
@@ -117,21 +58,41 @@ const accessLevels = [
   { value: "readonly", label: "Read Only", description: "View only, no actions" },
 ];
 
-const statusOptions = [
-  { value: "Active", color: "success" },
-  { value: "Suspended", color: "destructive" },
-  { value: "Pending", color: "warning" },
-];
-
 export const UsersPage = () => {
-  const [users, setUsers] = useState(initialUsers);
+  const [users, setUsers] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
-  const [newUser, setNewUser] = useState({ name: "", email: "", role: "User", accessLevel: "standard" });
+  const [isSaving, setIsSaving] = useState(false);
+  const [newUser, setNewUser] = useState({ 
+    name: "", 
+    email: "", 
+    password: "welcome123",
+    role: "User", 
+    status: "Pending",
+    access_level: "standard" 
+  });
   const [editUser, setEditUser] = useState(null);
+
+  // Fetch users on mount
+  useEffect(() => {
+    fetchUsers();
+  }, []);
+
+  const fetchUsers = async () => {
+    try {
+      const data = await usersAPI.getAll();
+      setUsers(data);
+    } catch (error) {
+      toast.error("Failed to load users");
+      console.error(error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const filteredUsers = users.filter(
     (user) =>
@@ -139,99 +100,131 @@ export const UsersPage = () => {
       user.email.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const handleAddUser = () => {
+  const handleAddUser = async () => {
     if (!newUser.name || !newUser.email) {
       toast.error("Please fill in all fields");
       return;
     }
 
-    const initials = newUser.name
-      .split(" ")
-      .map((n) => n[0])
-      .join("")
-      .toUpperCase();
-
-    const user = {
-      id: Date.now(),
-      ...newUser,
-      status: "Pending",
-      initials,
-      lastActive: "Never",
-      invitedAt: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-    };
-
-    setUsers([...users, user]);
-    setNewUser({ name: "", email: "", role: "User", accessLevel: "standard" });
-    setIsAddDialogOpen(false);
-    toast.success("Invitation sent!", {
-      description: `An invitation email has been sent to ${user.email}`,
-    });
+    setIsSaving(true);
+    try {
+      const created = await usersAPI.create(newUser);
+      setUsers([...users, created]);
+      setNewUser({ 
+        name: "", 
+        email: "", 
+        password: "welcome123",
+        role: "User", 
+        status: "Pending",
+        access_level: "standard" 
+      });
+      setIsAddDialogOpen(false);
+      toast.success("Invitation sent!", {
+        description: `An invitation email has been sent to ${created.email}`,
+      });
+    } catch (error) {
+      toast.error(`Failed to create user: ${error.message}`);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleEditUser = (user) => {
-    setEditUser({ ...user });
+    setEditUser({ 
+      ...user,
+      role: user.role === "Administrator" ? "Administrator" : "User"
+    });
     setIsEditDialogOpen(true);
   };
 
-  const handleSaveEdit = () => {
-    if (!editUser.name || !editUser.email) {
+  const handleSaveEdit = async () => {
+    if (!editUser.name) {
       toast.error("Please fill in all fields");
       return;
     }
 
-    setUsers(users.map((u) => (u.id === editUser.id ? editUser : u)));
-    setIsEditDialogOpen(false);
-    setEditUser(null);
-    toast.success("User updated successfully!");
+    setIsSaving(true);
+    try {
+      const updated = await usersAPI.update(editUser.id, {
+        name: editUser.name,
+        role: editUser.role,
+        status: editUser.status,
+        access_level: editUser.access_level,
+      });
+      setUsers(users.map((u) => (u.id === editUser.id ? { ...u, ...updated } : u)));
+      setIsEditDialogOpen(false);
+      setEditUser(null);
+      toast.success("User updated successfully!");
+    } catch (error) {
+      toast.error(`Failed to update user: ${error.message}`);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const handleDeleteUser = () => {
-    if (selectedUser) {
+  const handleDeleteUser = async () => {
+    if (!selectedUser) return;
+
+    setIsSaving(true);
+    try {
+      await usersAPI.delete(selectedUser.id);
       setUsers(users.filter((u) => u.id !== selectedUser.id));
       toast.success(`${selectedUser.name} has been removed`);
       setDeleteDialogOpen(false);
       setSelectedUser(null);
+    } catch (error) {
+      toast.error(`Failed to delete user: ${error.message}`);
+    } finally {
+      setIsSaving(false);
     }
   };
 
-  const handleSuspendUser = (user) => {
-    setUsers(
-      users.map((u) =>
-        u.id === user.id ? { ...u, status: "Suspended" } : u
-      )
-    );
-    toast.warning(`${user.name} has been suspended`, {
-      description: "User can no longer access the portal.",
-    });
+  const handleSuspendUser = async (user) => {
+    try {
+      await usersAPI.suspend(user.id);
+      setUsers(users.map((u) => u.id === user.id ? { ...u, status: "Suspended" } : u));
+      toast.warning(`${user.name} has been suspended`, {
+        description: "User can no longer access the portal.",
+      });
+    } catch (error) {
+      toast.error(`Failed to suspend user: ${error.message}`);
+    }
   };
 
-  const handleReactivateUser = (user) => {
-    setUsers(
-      users.map((u) =>
-        u.id === user.id ? { ...u, status: "Active" } : u
-      )
-    );
-    toast.success(`${user.name} has been reactivated`, {
-      description: "User can now access the portal.",
-    });
+  const handleReactivateUser = async (user) => {
+    try {
+      await usersAPI.reactivate(user.id);
+      setUsers(users.map((u) => u.id === user.id ? { ...u, status: "Active" } : u));
+      toast.success(`${user.name} has been reactivated`, {
+        description: "User can now access the portal.",
+      });
+    } catch (error) {
+      toast.error(`Failed to reactivate user: ${error.message}`);
+    }
   };
 
-  const handleResendInvitation = (user) => {
-    toast.success("Invitation resent!", {
-      description: `A new invitation email has been sent to ${user.email}`,
-    });
+  const handleResendInvitation = async (user) => {
+    try {
+      await usersAPI.resendInvitation(user.id);
+      toast.success("Invitation resent!", {
+        description: `A new invitation email has been sent to ${user.email}`,
+      });
+    } catch (error) {
+      toast.error(`Failed to resend invitation: ${error.message}`);
+    }
   };
 
-  const handleChangeAccessLevel = (user, newLevel) => {
-    setUsers(
-      users.map((u) =>
-        u.id === user.id ? { ...u, accessLevel: newLevel } : u
-      )
-    );
-    const levelLabel = accessLevels.find((l) => l.value === newLevel)?.label;
-    toast.success(`Access level updated`, {
-      description: `${user.name} now has ${levelLabel} access.`,
-    });
+  const handleChangeAccessLevel = async (user, newLevel) => {
+    try {
+      await usersAPI.update(user.id, { access_level: newLevel });
+      setUsers(users.map((u) => u.id === user.id ? { ...u, access_level: newLevel } : u));
+      const levelLabel = accessLevels.find((l) => l.value === newLevel)?.label;
+      toast.success(`Access level updated`, {
+        description: `${user.name} now has ${levelLabel} access.`,
+      });
+    } catch (error) {
+      toast.error(`Failed to update access level: ${error.message}`);
+    }
   };
 
   const getStatusBadge = (status) => {
@@ -252,6 +245,14 @@ export const UsersPage = () => {
     };
     return variants[level] || "secondary";
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[50vh]">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="animate-fade-in">
@@ -326,7 +327,7 @@ export const UsersPage = () => {
                   <Avatar className="h-12 w-12">
                     <AvatarFallback
                       className={`${
-                        user.role === "Admin"
+                        user.role === "Administrator"
                           ? "bg-gradient-primary text-primary-foreground"
                           : user.status === "Suspended"
                           ? "bg-destructive/20 text-destructive"
@@ -339,25 +340,25 @@ export const UsersPage = () => {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <h3 className="font-bold text-foreground">{user.name}</h3>
-                      {user.role === "Admin" && (
+                      {user.role === "Administrator" && (
                         <Shield className="h-4 w-4 text-admin" />
                       )}
                     </div>
                     <p className="text-sm text-muted-foreground truncate">{user.email}</p>
-                    <p className="text-xs text-muted-foreground mt-1">Last active: {user.lastActive}</p>
+                    <p className="text-xs text-muted-foreground mt-1">Last active: {user.last_active || "Never"}</p>
                   </div>
                 </div>
 
                 {/* Badges */}
                 <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant={user.role === "Admin" ? "admin" : "user"}>
-                    {user.role}
+                  <Badge variant={user.role === "Administrator" ? "admin" : "user"}>
+                    {user.role === "Administrator" ? "Admin" : "User"}
                   </Badge>
                   <Badge variant={getStatusBadge(user.status)}>
                     {user.status}
                   </Badge>
-                  <Badge variant={getAccessBadge(user.accessLevel)}>
-                    {accessLevels.find((l) => l.value === user.accessLevel)?.label}
+                  <Badge variant={getAccessBadge(user.access_level)}>
+                    {accessLevels.find((l) => l.value === user.access_level)?.label || "Standard"}
                   </Badge>
                 </div>
 
@@ -365,7 +366,7 @@ export const UsersPage = () => {
                 <div className="flex items-center gap-2">
                   {/* Quick Access Level Change */}
                   <Select
-                    value={user.accessLevel}
+                    value={user.access_level}
                     onValueChange={(value) => handleChangeAccessLevel(user, value)}
                   >
                     <SelectTrigger className="w-32 h-9">
@@ -404,7 +405,7 @@ export const UsersPage = () => {
 
                       <DropdownMenuSeparator />
 
-                      {user.status === "Active" && user.role !== "Admin" && (
+                      {user.status === "Active" && user.role !== "Administrator" && (
                         <DropdownMenuItem
                           onClick={() => handleSuspendUser(user)}
                           className="text-warning focus:text-warning"
@@ -424,7 +425,7 @@ export const UsersPage = () => {
                         </DropdownMenuItem>
                       )}
 
-                      {user.role !== "Admin" && (
+                      {user.role !== "Administrator" && (
                         <>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
@@ -483,6 +484,17 @@ export const UsersPage = () => {
                 onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
               />
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="password">Initial Password</Label>
+              <Input
+                id="password"
+                type="password"
+                placeholder="Enter initial password"
+                value={newUser.password}
+                onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
+              />
+              <p className="text-xs text-muted-foreground">User can change this after first login</p>
+            </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="role">Role</Label>
@@ -494,7 +506,7 @@ export const UsersPage = () => {
                     <SelectValue placeholder="Select role" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Admin">Admin</SelectItem>
+                    <SelectItem value="Administrator">Admin</SelectItem>
                     <SelectItem value="User">User</SelectItem>
                   </SelectContent>
                 </Select>
@@ -502,8 +514,8 @@ export const UsersPage = () => {
               <div className="space-y-2">
                 <Label htmlFor="access">Access Level</Label>
                 <Select
-                  value={newUser.accessLevel}
-                  onValueChange={(value) => setNewUser({ ...newUser, accessLevel: value })}
+                  value={newUser.access_level}
+                  onValueChange={(value) => setNewUser({ ...newUser, access_level: value })}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select access" />
@@ -518,9 +530,23 @@ export const UsersPage = () => {
                 </Select>
               </div>
             </div>
-            <Button variant="gradient" className="w-full mt-4" onClick={handleAddUser}>
-              <Mail className="mr-2 h-4 w-4" />
-              Send Invitation
+            <Button 
+              variant="gradient" 
+              className="w-full mt-4" 
+              onClick={handleAddUser}
+              disabled={isSaving}
+            >
+              {isSaving ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Sending...
+                </>
+              ) : (
+                <>
+                  <Mail className="mr-2 h-4 w-4" />
+                  Send Invitation
+                </>
+              )}
             </Button>
           </div>
         </DialogContent>
@@ -551,8 +577,10 @@ export const UsersPage = () => {
                   id="editEmail"
                   type="email"
                   value={editUser.email}
-                  onChange={(e) => setEditUser({ ...editUser, email: e.target.value })}
+                  disabled
+                  className="bg-muted"
                 />
+                <p className="text-xs text-muted-foreground">Email cannot be changed</p>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -565,7 +593,7 @@ export const UsersPage = () => {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Admin">Admin</SelectItem>
+                      <SelectItem value="Administrator">Admin</SelectItem>
                       <SelectItem value="User">User</SelectItem>
                     </SelectContent>
                   </Select>
@@ -590,8 +618,8 @@ export const UsersPage = () => {
               <div className="space-y-2">
                 <Label>Access Level</Label>
                 <Select
-                  value={editUser.accessLevel}
-                  onValueChange={(value) => setEditUser({ ...editUser, accessLevel: value })}
+                  value={editUser.access_level}
+                  onValueChange={(value) => setEditUser({ ...editUser, access_level: value })}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -613,11 +641,24 @@ export const UsersPage = () => {
                   variant="outline"
                   className="flex-1"
                   onClick={() => setIsEditDialogOpen(false)}
+                  disabled={isSaving}
                 >
                   Cancel
                 </Button>
-                <Button variant="gradient" className="flex-1" onClick={handleSaveEdit}>
-                  Save Changes
+                <Button 
+                  variant="gradient" 
+                  className="flex-1" 
+                  onClick={handleSaveEdit}
+                  disabled={isSaving}
+                >
+                  {isSaving ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    "Save Changes"
+                  )}
                 </Button>
               </div>
             </div>
@@ -636,12 +677,13 @@ export const UsersPage = () => {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={isSaving}>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDeleteUser}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={isSaving}
             >
-              Delete User
+              {isSaving ? "Deleting..." : "Delete User"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
