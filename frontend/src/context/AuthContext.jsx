@@ -8,6 +8,14 @@ export const AuthProvider = ({ children }) => {
   const [token, setToken] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Logout function
+  const logout = () => {
+    setUser(null);
+    setToken(null);
+    localStorage.removeItem("dsg_token");
+    localStorage.removeItem("dsg_user");
+  };
+
   // Check for existing session on mount
   useEffect(() => {
     const savedToken = localStorage.getItem("dsg_token");
@@ -49,14 +57,6 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       return { success: false, error: error.message || "Invalid email or password" };
     }
-  };
-
-  // Logout function
-  const logout = () => {
-    setUser(null);
-    setToken(null);
-    localStorage.removeItem("dsg_token");
-    localStorage.removeItem("dsg_user");
   };
 
   // Add credential for a tool
