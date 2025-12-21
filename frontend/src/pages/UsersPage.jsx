@@ -552,8 +552,39 @@ export const UsersPage = () => {
                 type="email"
                 placeholder="Enter email address"
                 value={newUser.email}
-                onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
+                onChange={(e) => {
+                  setNewUser({ ...newUser, email: e.target.value });
+                  setExternalDomainApproved(false); // Reset approval when email changes
+                }}
+                className={isExternalEmail ? "border-warning" : ""}
               />
+              {/* Domain restriction warning */}
+              {isExternalEmail && (
+                <div className="p-3 rounded-lg bg-warning/10 border border-warning/30 space-y-2">
+                  <div className="flex items-center gap-2 text-warning">
+                    <AlertTriangle className="h-4 w-4" />
+                    <span className="text-sm font-medium">External Domain Detected</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    This email is not from an approved DSG domain (@dsgtransport.net, @teamdsgtransport.com, @dsgtransport.com).
+                  </p>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={externalDomainApproved}
+                      onChange={(e) => setExternalDomainApproved(e.target.checked)}
+                      className="rounded border-warning text-warning focus:ring-warning"
+                    />
+                    <span className="text-sm">I approve this external user to access the portal</span>
+                  </label>
+                </div>
+              )}
+              {!isExternalEmail && newUser.email && newUser.email.includes("@") && (
+                <p className="text-xs text-success flex items-center gap-1">
+                  <Check className="h-3 w-3" />
+                  Approved company domain
+                </p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="password">Password *</Label>
@@ -615,7 +646,7 @@ export const UsersPage = () => {
               variant="gradient" 
               className="w-full mt-4" 
               onClick={handleAddUser}
-              disabled={isSaving}
+              disabled={isSaving || (isExternalEmail && !externalDomainApproved)}
             >
               {isSaving ? (
                 <>
