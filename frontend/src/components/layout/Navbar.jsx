@@ -2,6 +2,7 @@ import { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,6 +13,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useAuth } from "@/context/AuthContext";
+import { useSupport } from "@/context/SupportContext";
 import {
   LayoutDashboard,
   User,
@@ -24,6 +26,8 @@ import {
   Menu,
   ChevronDown,
   HeadphonesIcon,
+  TicketIcon,
+  AlertCircle,
 } from "lucide-react";
 
 const navigation = [
@@ -36,18 +40,19 @@ const navigation = [
   { name: "Activity Logs", href: "/activity-logs", icon: FileText },
 ];
 
-// Admin-only navigation items
-const adminNavigation = [
-  { name: "Support", href: "/support", icon: HeadphonesIcon },
-];
-
 export const Navbar = ({ currentUser }) => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const { logout } = useAuth();
+  const { issues } = useSupport();
   const navigate = useNavigate();
 
   const isAdmin = currentUser?.role === "Administrator";
-  const allNavigation = isAdmin ? [...navigation, ...adminNavigation] : navigation;
+  
+  // Count open issues for badge
+  const userIssues = isAdmin 
+    ? issues 
+    : issues.filter((i) => i.userId === currentUser?.id);
+  const openIssuesCount = userIssues.filter((i) => i.status !== "resolved").length;
 
   const handleLogout = () => {
     logout();
@@ -69,7 +74,7 @@ export const Navbar = ({ currentUser }) => {
 
           {/* Desktop Navigation */}
           <div className="hidden lg:flex items-center gap-1">
-            {allNavigation.map((item) => (
+            {navigation.map((item) => (
               <NavLink key={item.name} to={item.href}>
                 {({ isActive }) => (
                   <Button
@@ -83,6 +88,46 @@ export const Navbar = ({ currentUser }) => {
                 )}
               </NavLink>
             ))}
+
+            {/* Issues Button - For both admin and users */}
+            <NavLink to="/issues">
+              {({ isActive }) => (
+                <Button
+                  variant={isActive ? "navActive" : "nav"}
+                  size="sm"
+                  className="gap-2 relative"
+                >
+                  <TicketIcon className="h-4 w-4" />
+                  <span className="hidden xl:inline">
+                    {isAdmin ? "Issues" : "My Issues"}
+                  </span>
+                  {openIssuesCount > 0 && (
+                    <Badge 
+                      variant="destructive" 
+                      className="absolute -top-1 -right-1 h-5 w-5 p-0 flex items-center justify-center text-xs"
+                    >
+                      {openIssuesCount}
+                    </Badge>
+                  )}
+                </Button>
+              )}
+            </NavLink>
+
+            {/* Admin-only Support Management */}
+            {isAdmin && (
+              <NavLink to="/support">
+                {({ isActive }) => (
+                  <Button
+                    variant={isActive ? "navActive" : "nav"}
+                    size="sm"
+                    className="gap-2"
+                  >
+                    <HeadphonesIcon className="h-4 w-4" />
+                    <span className="hidden xl:inline">Support</span>
+                  </Button>
+                )}
+              </NavLink>
+            )}
           </div>
 
           {/* User Menu */}
@@ -117,6 +162,15 @@ export const Navbar = ({ currentUser }) => {
                 <DropdownMenuItem onClick={() => navigate("/profile")}>
                   <User className="mr-2 h-4 w-4" />
                   Profile
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => navigate("/issues")}>
+                  <TicketIcon className="mr-2 h-4 w-4" />
+                  {isAdmin ? "All Issues" : "My Issues"}
+                  {openIssuesCount > 0 && (
+                    <Badge variant="destructive" className="ml-auto">
+                      {openIssuesCount}
+                    </Badge>
+                  )}
                 </DropdownMenuItem>
                 {isAdmin && (
                   <DropdownMenuItem onClick={() => navigate("/support")}>
@@ -157,7 +211,7 @@ export const Navbar = ({ currentUser }) => {
                   </div>
 
                   <nav className="flex flex-col gap-1">
-                    {allNavigation.map((item) => (
+                    {navigation.map((item) => (
                       <NavLink
                         key={item.name}
                         to={item.href}
@@ -174,6 +228,39 @@ export const Navbar = ({ currentUser }) => {
                         )}
                       </NavLink>
                     ))}
+
+                    {/* Issues - Mobile */}
+                    <NavLink to="/issues" onClick={() => setMobileOpen(false)}>
+                      {({ isActive }) => (
+                        <Button
+                          variant={isActive ? "navActive" : "nav"}
+                          className="w-full justify-start gap-3"
+                        >
+                          <TicketIcon className="h-5 w-5" />
+                          {isAdmin ? "All Issues" : "My Issues"}
+                          {openIssuesCount > 0 && (
+                            <Badge variant="destructive" className="ml-auto">
+                              {openIssuesCount}
+                            </Badge>
+                          )}
+                        </Button>
+                      )}
+                    </NavLink>
+
+                    {/* Admin Support - Mobile */}
+                    {isAdmin && (
+                      <NavLink to="/support" onClick={() => setMobileOpen(false)}>
+                        {({ isActive }) => (
+                          <Button
+                            variant={isActive ? "navActive" : "nav"}
+                            className="w-full justify-start gap-3"
+                          >
+                            <HeadphonesIcon className="h-5 w-5" />
+                            Support Management
+                          </Button>
+                        )}
+                      </NavLink>
+                    )}
                   </nav>
 
                   <div className="pt-4 border-t border-border">

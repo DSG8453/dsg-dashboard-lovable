@@ -18,6 +18,7 @@ import { IPManagementPage } from "@/pages/IPManagementPage";
 import { DevicesPage } from "@/pages/DevicesPage";
 import { ActivityLogsPage } from "@/pages/ActivityLogsPage";
 import { SupportManagementPage } from "@/pages/SupportManagementPage";
+import { IssuesPage } from "@/pages/IssuesPage";
 
 // Protected Route Component
 const ProtectedRoute = ({ children }) => {
@@ -141,6 +142,16 @@ function AppRoutes() {
           <ProtectedRoute>
             <AuthenticatedLayout>
               <SupportManagementPage />
+            </AuthenticatedLayout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/issues"
+        element={
+          <ProtectedRoute>
+            <AuthenticatedLayout>
+              <IssuesPage />
             </AuthenticatedLayout>
           </ProtectedRoute>
         }
