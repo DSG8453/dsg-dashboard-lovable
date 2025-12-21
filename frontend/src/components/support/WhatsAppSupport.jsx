@@ -26,7 +26,7 @@ import {
 import { useSupport } from "@/context/SupportContext";
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
-import { MessageCircle, Send, X, HelpCircle, AlertTriangle } from "lucide-react";
+import { MessageCircle, Send, HelpCircle, AlertTriangle } from "lucide-react";
 
 const categories = [
   { value: "tool_access", label: "Tool Access Issue" },
@@ -76,14 +76,14 @@ export const WhatsAppSupport = () => {
 
   return (
     <>
-      {/* Floating WhatsApp Button */}
-      <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-3">
+      {/* Floating WhatsApp Button - Positioned above "Made with Emergent" */}
+      <div className="fixed bottom-24 right-6 z-50 flex flex-col items-end gap-3">
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
                 onClick={() => setIsOpen(true)}
-                className="h-14 w-14 rounded-full shadow-lg bg-[#25D366] hover:bg-[#128C7E] text-white"
+                className="h-14 w-14 rounded-full shadow-lg bg-[#25D366] hover:bg-[#128C7E] text-white hover:scale-110 transition-transform"
                 size="icon"
               >
                 <MessageCircle className="h-7 w-7" />
