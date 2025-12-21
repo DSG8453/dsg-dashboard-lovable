@@ -1,15 +1,8 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
-import { toast } from "sonner";
 
 export const HeaderCard = ({ currentUser, onAddTool }) => {
-  const handleAddTool = () => {
-    toast.success("Add Tool dialog would open here", {
-      description: "This is a prototype - tool management coming soon!",
-    });
-  };
-
   return (
     <Card className="glass-card-strong border-2 border-border/50 shadow-lg mb-8">
       <CardContent className="p-6">
@@ -34,7 +27,7 @@ export const HeaderCard = ({ currentUser, onAddTool }) => {
             </div>
           </div>
 
-          <Button variant="gradient" onClick={handleAddTool} className="gap-2">
+          <Button variant="gradient" onClick={onAddTool} className="gap-2">
             <Plus className="h-4 w-4" />
             Add Tool
           </Button>
