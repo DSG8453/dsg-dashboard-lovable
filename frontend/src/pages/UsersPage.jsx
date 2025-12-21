@@ -527,7 +527,12 @@ export const UsersPage = () => {
       )}
 
       {/* Add User Dialog */}
-      <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+      <Dialog open={isAddDialogOpen} onOpenChange={(open) => {
+        setIsAddDialogOpen(open);
+        if (!open) {
+          setExternalDomainApproved(false);
+        }
+      }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Add New User</DialogTitle>
