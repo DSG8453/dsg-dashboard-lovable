@@ -123,7 +123,7 @@ export const UsersPage = () => {
   );
 
   const handleAddUser = async () => {
-    if (!newUser.name || !newUser.email) {
+    if (!newUser.name || !newUser.email || !newUser.password) {
       toast.error("Please fill in all fields");
       return;
     }
@@ -132,23 +132,47 @@ export const UsersPage = () => {
     try {
       const created = await usersAPI.create(newUser);
       setUsers([...users, created]);
+      
+      // Store credentials to show in dialog
+      setCreatedUserCredentials({
+        name: newUser.name,
+        email: newUser.email,
+        password: newUser.password,
+      });
+      
+      setIsAddDialogOpen(false);
+      setCredentialsDialogOpen(true);
+      
+      // Reset form
       setNewUser({ 
         name: "", 
         email: "", 
-        password: "welcome123",
+        password: "",
         role: "User", 
-        status: "Pending",
+        status: "Active",
         access_level: "standard" 
-      });
-      setIsAddDialogOpen(false);
-      toast.success("Invitation sent!", {
-        description: `An invitation email has been sent to ${created.email}`,
       });
     } catch (error) {
       toast.error(`Failed to create user: ${error.message}`);
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const copyCredentials = () => {
+    if (!createdUserCredentials) return;
+    const text = `DSG Transport Portal Login\n\nEmail: ${createdUserCredentials.email}\nPassword: ${createdUserCredentials.password}\n\nLogin at: ${window.location.origin}`;
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    toast.success("Credentials copied to clipboard!");
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const shareViaWhatsApp = () => {
+    if (!createdUserCredentials) return;
+    const message = `🚚 *DSG Transport Portal Login*\n\nHello ${createdUserCredentials.name},\n\nYour account has been created!\n\n📧 Email: ${createdUserCredentials.email}\n🔑 Password: ${createdUserCredentials.password}\n\n🔗 Login at: ${window.location.origin}\n\nPlease change your password after first login.`;
+    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
+    window.open(whatsappUrl, "_blank");
   };
 
   const handleEditUser = (user) => {
