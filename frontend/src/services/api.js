@@ -49,6 +49,13 @@ export const authAPI = {
       method: 'POST',
     }),
   
+  // Google OAuth session verification
+  googleSession: (sessionId) =>
+    fetchAPI('/api/auth/google/session', {
+      method: 'POST',
+      body: JSON.stringify({ session_id: sessionId }),
+    }),
+  
   getMe: () => fetchAPI('/api/auth/me'),
   
   logout: () => fetchAPI('/api/auth/logout', { method: 'POST' }),
