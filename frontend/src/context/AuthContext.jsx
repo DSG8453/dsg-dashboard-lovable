@@ -94,10 +94,46 @@ export const AuthProvider = ({ children }) => {
     initAuth();
   }, [logout, registerDevice]);
 
-  // Login function - calls backend API
+  // Login user - now supports 2SV
   const login = async (email, password) => {
     try {
       const response = await authAPI.login(email, password);
+      
+      // Check if 2SV is required
+      if (response.requires_otp) {
+        return { 
+          success: true, 
+          requiresOtp: true,
+          tempToken: response.temp_token,
+          message: response.message
+        };
+      }
+      
+      // No 2SV - direct login
+      localStorage.setItem("dsg_token", response.access_token);
+      localStorage.setItem("dsg_user", JSON.stringify(response.user));
+      
+      setToken(response.access_token);
+      setUser(response.user);
+      
+      // Register device after login
+      const deviceResult = await registerDevice(response.user);
+      
+      return { 
+        success: true, 
+        requiresOtp: false,
+        deviceApproved: deviceResult.approved,
+        deviceStatus: deviceResult.status 
+      };
+    } catch (error) {
+      return { success: false, error: error.message || "Invalid email or password" };
+    }
+  };
+
+  // Verify OTP for 2SV
+  const verifyOtp = async (email, otp, tempToken) => {
+    try {
+      const response = await authAPI.verifyOtp({ email, otp, temp_token: tempToken });
       
       // Save token and user
       localStorage.setItem("dsg_token", response.access_token);
@@ -110,12 +146,22 @@ export const AuthProvider = ({ children }) => {
       const deviceResult = await registerDevice(response.user);
       
       return { 
-        success: true, 
+        success: true,
         deviceApproved: deviceResult.approved,
         deviceStatus: deviceResult.status 
       };
     } catch (error) {
-      return { success: false, error: error.message || "Invalid email or password" };
+      return { success: false, error: error.message || "Invalid OTP code" };
+    }
+  };
+
+  // Resend OTP
+  const resendOtp = async (tempToken) => {
+    try {
+      const response = await authAPI.resendOtp(tempToken);
+      return { success: true, message: response.message };
+    } catch (error) {
+      return { success: false, error: error.message || "Failed to resend OTP" };
     }
   };
 
