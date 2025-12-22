@@ -176,9 +176,15 @@ export const LoginPage = () => {
   };
 
   const handleSSOLogin = async (provider) => {
-    toast.info(`${provider} SSO`, {
-      description: "SSO integration would connect here.",
-    });
+    if (provider === "Google") {
+      // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
+      const redirectUrl = window.location.origin + '/';
+      window.location.href = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
+    } else {
+      toast.info(`${provider} SSO`, {
+        description: "Microsoft SSO is not available. Please use Google or email login.",
+      });
+    }
   };
 
   // OTP Verification Screen
