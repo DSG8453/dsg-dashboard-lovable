@@ -622,7 +622,7 @@ export const UsersPage = () => {
 
                       <DropdownMenuSeparator />
 
-                      {user.status === "Active" && user.role !== "Administrator" && (
+                      {user.status === "Active" && user.role !== "Administrator" && user.role !== "Super Administrator" && (
                         <DropdownMenuItem
                           onClick={() => handleSuspendUser(user)}
                           className="text-warning focus:text-warning"
@@ -642,7 +642,8 @@ export const UsersPage = () => {
                         </DropdownMenuItem>
                       )}
 
-                      {user.role !== "Administrator" && (
+                      {/* Only Super Admin can delete users */}
+                      {isSuperAdmin && user.role !== "Administrator" && user.role !== "Super Administrator" && (
                         <>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
