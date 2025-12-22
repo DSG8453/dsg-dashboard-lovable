@@ -1,5 +1,6 @@
-import { createContext, useContext, useState, useEffect } from "react";
-import { authAPI, credentialsAPI } from "@/services/api";
+import { createContext, useContext, useState, useEffect, useCallback } from "react";
+import { authAPI, credentialsAPI, devicesAPI } from "@/services/api";
+import { getDeviceInfo, setStoredDeviceStatus, clearStoredDeviceStatus } from "@/utils/deviceFingerprint";
 
 const AuthContext = createContext(null);
 
@@ -7,39 +8,91 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [deviceStatus, setDeviceStatus] = useState(null); // 'pending', 'approved', 'rejected', 'revoked'
+  const [deviceInfo, setDeviceInfo] = useState(null);
 
   // Logout function
-  const logout = () => {
+  const logout = useCallback(() => {
     setUser(null);
     setToken(null);
+    setDeviceStatus(null);
+    setDeviceInfo(null);
     localStorage.removeItem("dsg_token");
     localStorage.removeItem("dsg_user");
-  };
+    clearStoredDeviceStatus();
+  }, []);
+
+  // Register device and check approval status
+  const registerDevice = useCallback(async (currentUser) => {
+    try {
+      const info = await getDeviceInfo();
+      setDeviceInfo(info);
+      
+      const result = await devicesAPI.register({
+        user_id: currentUser.id,
+        user_name: currentUser.name,
+        user_email: currentUser.email,
+        ...info,
+      });
+      
+      setDeviceStatus(result.status);
+      setStoredDeviceStatus({ status: result.status, deviceId: result.id });
+      
+      return result;
+    } catch (error) {
+      console.error("Failed to register device:", error);
+      // If device registration fails, allow access (fallback)
+      setDeviceStatus("approved");
+      return { status: "approved", approved: true };
+    }
+  }, []);
+
+  // Check device status
+  const checkDeviceStatus = useCallback(async () => {
+    if (!user) return;
+    
+    try {
+      const info = await getDeviceInfo();
+      const result = await devicesAPI.checkDevice(info.fingerprint);
+      setDeviceStatus(result.status);
+      setStoredDeviceStatus({ status: result.status, deviceId: result.device_id });
+      return result;
+    } catch (error) {
+      console.error("Failed to check device:", error);
+      return { status: "approved", approved: true };
+    }
+  }, [user]);
 
   // Check for existing session on mount
   useEffect(() => {
-    const savedToken = localStorage.getItem("dsg_token");
-    const savedUser = localStorage.getItem("dsg_user");
-    
-    if (savedToken && savedUser) {
-      setToken(savedToken);
-      setUser(JSON.parse(savedUser));
+    const initAuth = async () => {
+      const savedToken = localStorage.getItem("dsg_token");
+      const savedUser = localStorage.getItem("dsg_user");
       
-      // Verify token is still valid
-      authAPI.getMe()
-        .then((userData) => {
+      if (savedToken && savedUser) {
+        setToken(savedToken);
+        const parsedUser = JSON.parse(savedUser);
+        setUser(parsedUser);
+        
+        try {
+          // Verify token is still valid
+          const userData = await authAPI.getMe();
           setUser(userData);
           localStorage.setItem("dsg_user", JSON.stringify(userData));
-        })
-        .catch(() => {
+          
+          // Register/check device
+          await registerDevice(userData);
+        } catch (error) {
           // Token invalid, clear session
           logout();
-        })
-        .finally(() => setIsLoading(false));
-    } else {
+        }
+      }
+      
       setIsLoading(false);
-    }
-  }, []);
+    };
+    
+    initAuth();
+  }, [logout, registerDevice]);
 
   // Login function - calls backend API
   const login = async (email, password) => {
@@ -53,7 +106,14 @@ export const AuthProvider = ({ children }) => {
       setToken(response.access_token);
       setUser(response.user);
       
-      return { success: true };
+      // Register device after login
+      const deviceResult = await registerDevice(response.user);
+      
+      return { 
+        success: true, 
+        deviceApproved: deviceResult.approved,
+        deviceStatus: deviceResult.status 
+      };
     } catch (error) {
       return { success: false, error: error.message || "Invalid email or password" };
     }
@@ -128,13 +188,20 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // Check if device is approved (admins are always approved)
+  const isDeviceApproved = user?.role === "Administrator" || deviceStatus === "approved";
+
   const value = {
     user,
     token,
     isLoading,
     isAuthenticated: !!user,
+    deviceStatus,
+    deviceInfo,
+    isDeviceApproved,
     login,
     logout,
+    checkDeviceStatus,
     addToolCredential,
     updateToolCredential,
     deleteToolCredential,
