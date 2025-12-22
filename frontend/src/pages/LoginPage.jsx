@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,14 +7,30 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
-import { Loader2, Lock, Mail, Shield, Truck } from "lucide-react";
+import { Loader2, Lock, Mail, Shield, ArrowLeft, KeyRound, RefreshCw } from "lucide-react";
 
 export const LoginPage = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const { login } = useAuth();
+  
+  // 2SV state
+  const [showOtpScreen, setShowOtpScreen] = useState(false);
+  const [tempToken, setTempToken] = useState("");
+  const [otp, setOtp] = useState(["", "", "", "", "", ""]);
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const otpRefs = [useRef(), useRef(), useRef(), useRef(), useRef(), useRef()];
+  
+  const { login, verifyOtp, resendOtp } = useAuth();
   const navigate = useNavigate();
+
+  // Countdown for resend button
+  useEffect(() => {
+    if (resendCooldown > 0) {
+      const timer = setTimeout(() => setResendCooldown(resendCooldown - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [resendCooldown]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -30,10 +46,23 @@ export const LoginPage = () => {
       const result = await login(email, password);
       
       if (result.success) {
-        toast.success("Welcome back!", {
-          description: "You have been successfully signed in.",
-        });
-        navigate("/");
+        if (result.requiresOtp) {
+          // Show OTP screen
+          setTempToken(result.tempToken);
+          setShowOtpScreen(true);
+          setResendCooldown(60);
+          toast.info("Verification Required", {
+            description: result.message,
+          });
+          // Focus first OTP input
+          setTimeout(() => otpRefs[0].current?.focus(), 100);
+        } else {
+          // Direct login successful
+          toast.success("Welcome back!", {
+            description: "You have been successfully signed in.",
+          });
+          navigate("/");
+        }
       } else {
         toast.error("Login Failed", {
           description: result.error,
@@ -46,16 +75,221 @@ export const LoginPage = () => {
     }
   };
 
-  const handleSSOLogin = async (provider) => {
-    toast.info(`${provider} SSO`, {
-      description: "SSO integration would connect here. Using demo credentials.",
-    });
+  // Handle OTP input change
+  const handleOtpChange = (index, value) => {
+    if (!/^\d*$/.test(value)) return; // Only allow digits
     
-    // Demo: Auto-fill with admin credentials
-    setEmail("admin@dsgtransport.com");
-    setPassword("admin123");
+    const newOtp = [...otp];
+    newOtp[index] = value.slice(-1); // Only last digit
+    setOtp(newOtp);
+    
+    // Auto-focus next input
+    if (value && index < 5) {
+      otpRefs[index + 1].current?.focus();
+    }
+    
+    // Auto-submit when all digits entered
+    if (newOtp.every(d => d) && newOtp.join("").length === 6) {
+      handleOtpSubmit(newOtp.join(""));
+    }
   };
 
+  // Handle backspace
+  const handleOtpKeyDown = (index, e) => {
+    if (e.key === "Backspace" && !otp[index] && index > 0) {
+      otpRefs[index - 1].current?.focus();
+    }
+  };
+
+  // Handle paste
+  const handleOtpPaste = (e) => {
+    e.preventDefault();
+    const pastedData = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
+    if (pastedData.length === 6) {
+      const newOtp = pastedData.split("");
+      setOtp(newOtp);
+      handleOtpSubmit(pastedData);
+    }
+  };
+
+  // Submit OTP
+  const handleOtpSubmit = async (otpCode = otp.join("")) => {
+    if (otpCode.length !== 6) {
+      toast.error("Please enter all 6 digits");
+      return;
+    }
+    
+    setIsLoading(true);
+    
+    try {
+      const result = await verifyOtp(email, otpCode, tempToken);
+      
+      if (result.success) {
+        toast.success("Verification Successful!", {
+          description: "You have been successfully signed in.",
+        });
+        navigate("/");
+      } else {
+        toast.error("Verification Failed", {
+          description: result.error,
+        });
+        // Clear OTP inputs
+        setOtp(["", "", "", "", "", ""]);
+        otpRefs[0].current?.focus();
+      }
+    } catch (error) {
+      toast.error("An error occurred during verification");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Resend OTP
+  const handleResendOtp = async () => {
+    if (resendCooldown > 0) return;
+    
+    try {
+      const result = await resendOtp(tempToken);
+      if (result.success) {
+        toast.success("Code Resent", {
+          description: result.message,
+        });
+        setResendCooldown(60);
+        setOtp(["", "", "", "", "", ""]);
+        otpRefs[0].current?.focus();
+      } else {
+        toast.error("Failed to resend code", {
+          description: result.error,
+        });
+      }
+    } catch (error) {
+      toast.error("An error occurred");
+    }
+  };
+
+  // Back to login
+  const handleBackToLogin = () => {
+    setShowOtpScreen(false);
+    setOtp(["", "", "", "", "", ""]);
+    setTempToken("");
+    setPassword("");
+  };
+
+  const handleSSOLogin = async (provider) => {
+    toast.info(`${provider} SSO`, {
+      description: "SSO integration would connect here.",
+    });
+  };
+
+  // OTP Verification Screen
+  if (showOtpScreen) {
+    return (
+      <div className="min-h-screen bg-gradient-dsg flex items-center justify-center p-4">
+        <div className="w-full max-w-md">
+          {/* Logo Header */}
+          <div className="text-center mb-8">
+            <div className="flex justify-center mb-4">
+              <img
+                src="https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/691ee53ded166d6334e8b9c6/0583cf617_315logodsg_.png"
+                alt="DSG Transport LLC"
+                className="h-16 w-auto"
+              />
+            </div>
+            <h1 className="text-2xl font-bold text-foreground">DSG TRANSPORT LLC</h1>
+            <p className="text-muted-foreground">2-Step Verification</p>
+          </div>
+
+          <Card className="border-2 border-border/50 shadow-xl">
+            <CardHeader className="text-center">
+              <div className="mx-auto mb-2 p-3 rounded-full bg-primary/10 w-fit">
+                <KeyRound className="h-6 w-6 text-primary" />
+              </div>
+              <CardTitle>Enter Verification Code</CardTitle>
+              <CardDescription>
+                We've sent a 6-digit code to <strong>{email}</strong>
+              </CardDescription>
+            </CardHeader>
+
+            <CardContent className="space-y-6">
+              {/* OTP Input */}
+              <div className="flex justify-center gap-2" onPaste={handleOtpPaste}>
+                {otp.map((digit, index) => (
+                  <Input
+                    key={index}
+                    ref={otpRefs[index]}
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={1}
+                    value={digit}
+                    onChange={(e) => handleOtpChange(index, e.target.value)}
+                    onKeyDown={(e) => handleOtpKeyDown(index, e)}
+                    className="w-12 h-14 text-center text-2xl font-bold"
+                    disabled={isLoading}
+                  />
+                ))}
+              </div>
+
+              {/* Verify Button */}
+              <Button
+                variant="gradient"
+                className="w-full h-11"
+                onClick={() => handleOtpSubmit()}
+                disabled={isLoading || otp.join("").length !== 6}
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Verifying...
+                  </>
+                ) : (
+                  "Verify Code"
+                )}
+              </Button>
+
+              {/* Resend Code */}
+              <div className="text-center">
+                <p className="text-sm text-muted-foreground mb-2">
+                  Didn't receive the code?
+                </p>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleResendOtp}
+                  disabled={resendCooldown > 0}
+                  className="gap-2"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Resend Code"}
+                </Button>
+              </div>
+
+              <Separator />
+
+              {/* Back to Login */}
+              <Button
+                variant="outline"
+                className="w-full gap-2"
+                onClick={handleBackToLogin}
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Back to Login
+              </Button>
+
+              {/* Info */}
+              <div className="p-3 rounded-lg bg-warning/10 border border-warning/20 text-sm">
+                <p className="font-medium text-warning mb-1">⚠️ Security Notice</p>
+                <p className="text-muted-foreground text-xs">
+                  This code expires in 5 minutes. Never share this code with anyone.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  // Regular Login Screen
   return (
     <div className="min-h-screen bg-gradient-dsg flex items-center justify-center p-4">
       <div className="w-full max-w-md">
@@ -77,7 +311,7 @@ export const LoginPage = () => {
             <div className="mx-auto mb-2 p-3 rounded-full bg-primary/10 w-fit">
               <Shield className="h-6 w-6 text-primary" />
             </div>
-            <CardTitle>Single Sign-On</CardTitle>
+            <CardTitle>Secure Login</CardTitle>
             <CardDescription>
               Sign in to access company tools and resources
             </CardDescription>
@@ -175,13 +409,12 @@ export const LoginPage = () => {
               </Button>
             </form>
 
-            {/* Demo Credentials */}
-            <div className="p-3 rounded-lg bg-muted/50 text-sm">
-              <p className="font-medium text-foreground mb-2">Demo Credentials:</p>
-              <div className="space-y-1 text-muted-foreground">
-                <p><span className="font-medium">Admin:</span> admin@dsgtransport.com / admin123</p>
-                <p><span className="font-medium">User:</span> john.smith@dsgtransport.com / john123</p>
-              </div>
+            {/* Info about 2SV */}
+            <div className="p-3 rounded-lg bg-primary/5 border border-primary/20 text-sm">
+              <p className="font-medium text-primary mb-1">🔐 2-Step Verification</p>
+              <p className="text-muted-foreground text-xs">
+                For enhanced security, some accounts require email verification on each login.
+              </p>
             </div>
           </CardContent>
         </Card>
