@@ -130,6 +130,32 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // Google OAuth Login
+  const loginWithGoogle = async (sessionId) => {
+    try {
+      const response = await authAPI.googleSession(sessionId);
+      
+      // Save token and user
+      localStorage.setItem("dsg_token", response.access_token);
+      localStorage.setItem("dsg_user", JSON.stringify(response.user));
+      
+      setToken(response.access_token);
+      setUser(response.user);
+      
+      // Register device after login
+      const deviceResult = await registerDevice(response.user);
+      
+      return { 
+        success: true,
+        user: response.user,
+        deviceApproved: deviceResult.approved,
+        deviceStatus: deviceResult.status 
+      };
+    } catch (error) {
+      return { success: false, error: error.message || "Google login failed" };
+    }
+  };
+
   // Verify OTP for 2SV
   const verifyOtp = async (email, otp, tempToken) => {
     try {
