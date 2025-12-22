@@ -151,12 +151,27 @@ export const ToolCredentialsDialog = ({
     }
   };
 
-  const launchTool = (cred) => {
+  const launchTool = async (cred) => {
     if (tool.url && tool.url !== "#") {
-      navigator.clipboard.writeText(cred.username);
-      toast.success("Username copied!", {
-        description: "Opening tool... Paste your username, then use your saved password.",
-      });
+      try {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(cred.username);
+        } else {
+          const textArea = document.createElement("textarea");
+          textArea.value = cred.username;
+          textArea.style.position = "fixed";
+          textArea.style.left = "-999999px";
+          document.body.appendChild(textArea);
+          textArea.select();
+          document.execCommand('copy');
+          document.body.removeChild(textArea);
+        }
+        toast.success("Username copied!", {
+          description: "Opening tool... Paste your username, then use your saved password.",
+        });
+      } catch (err) {
+        toast.info(`Username: ${cred.username}`, { duration: 5000 });
+      }
       window.open(tool.url, "_blank", "noopener,noreferrer");
     } else {
       toast.info("Tool URL not configured");
