@@ -619,8 +619,8 @@ export const UsersPage = () => {
 
                 {/* Badges */}
                 <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant={user.role === "Administrator" ? "admin" : "user"}>
-                    {user.role === "Administrator" ? "Admin" : "User"}
+                  <Badge variant={user.role === "Super Administrator" ? "admin" : user.role === "Administrator" ? "admin" : "user"}>
+                    {user.role === "Super Administrator" ? "Super Admin" : user.role === "Administrator" ? "Admin" : "User"}
                   </Badge>
                   <Badge variant={getStatusBadge(user.status)}>
                     {user.status}
@@ -635,12 +635,25 @@ export const UsersPage = () => {
                       {user.allowed_tools.length} tools
                     </Badge>
                   )}
+                  {/* Assigned users count for Admins */}
+                  {user.role === "Administrator" && user.assigned_users && user.assigned_users.length > 0 && (
+                    <Badge variant="outline" className="gap-1">
+                      <Users className="h-3 w-3" />
+                      {user.assigned_users.length} users
+                    </Badge>
+                  )}
+                  {/* Managed by badge for Users */}
+                  {user.managed_by && (
+                    <Badge variant="secondary" className="gap-1 text-xs">
+                      Managed by: {users.find(u => u.id === user.managed_by)?.name || "Admin"}
+                    </Badge>
+                  )}
                 </div>
 
                 {/* Actions */}
                 <div className="flex items-center gap-2">
-                  {/* Quick Tool Access Button */}
-                  {user.role !== "Administrator" && (
+                  {/* Quick Tool Access Button - Only if can manage */}
+                  {user.role === "User" && canManageUser(user.id) && (
                     <Button 
                       variant="outline" 
                       size="sm" 
@@ -652,24 +665,39 @@ export const UsersPage = () => {
                     </Button>
                   )}
 
-                  {/* Quick Access Level Change */}
-                  <Select
-                    value={user.access_level}
-                    onValueChange={(value) => handleChangeAccessLevel(user, value)}
-                  >
-                    <SelectTrigger className="w-32 h-9">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {accessLevels.map((level) => (
-                        <SelectItem key={level.value} value={level.value}>
-                          <div>
-                            <p className="font-medium">{level.label}</p>
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  {/* Assign Users Button for Admins (Super Admin only) */}
+                  {isSuperAdmin && user.role === "Administrator" && (
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="gap-1 hidden sm:flex"
+                      onClick={() => handleOpenAssignUsers(user)}
+                    >
+                      <Users className="h-4 w-4" />
+                      Assign Users
+                    </Button>
+                  )}
+
+                  {/* Quick Access Level Change - Only Super Admin can change */}
+                  {isSuperAdmin && (
+                    <Select
+                      value={user.access_level}
+                      onValueChange={(value) => handleChangeAccessLevel(user, value)}
+                    >
+                      <SelectTrigger className="w-32 h-9">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {accessLevels.map((level) => (
+                          <SelectItem key={level.value} value={level.value}>
+                            <div>
+                              <p className="font-medium">{level.label}</p>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
 
                   {/* Actions Dropdown */}
                   <DropdownMenu>
@@ -679,12 +707,24 @@ export const UsersPage = () => {
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-48">
-                      <DropdownMenuItem onClick={() => handleEditUser(user)}>
-                        <Edit className="mr-2 h-4 w-4" />
-                        Edit User
-                      </DropdownMenuItem>
+                      {/* Edit User - Only Super Admin can edit */}
+                      {isSuperAdmin && (
+                        <DropdownMenuItem onClick={() => handleEditUser(user)}>
+                          <Edit className="mr-2 h-4 w-4" />
+                          Edit User
+                        </DropdownMenuItem>
+                      )}
 
-                      {user.role !== "Administrator" && (
+                      {/* Assign Users to Admin (Super Admin only) */}
+                      {isSuperAdmin && user.role === "Administrator" && (
+                        <DropdownMenuItem onClick={() => handleOpenAssignUsers(user)}>
+                          <Users className="mr-2 h-4 w-4" />
+                          Assign Users to Admin
+                        </DropdownMenuItem>
+                      )}
+
+                      {/* Manage Tool Access - Only for Users the current user can manage */}
+                      {user.role === "User" && canManageUser(user.id) && (
                         <DropdownMenuItem onClick={() => handleOpenToolAccess(user)}>
                           <Package className="mr-2 h-4 w-4" />
                           Manage Tool Access
@@ -700,7 +740,8 @@ export const UsersPage = () => {
 
                       <DropdownMenuSeparator />
 
-                      {user.status === "Active" && user.role !== "Administrator" && user.role !== "Super Administrator" && (
+                      {/* Suspend - Only for Users the current user can manage */}
+                      {user.status === "Active" && user.role === "User" && canManageUser(user.id) && (
                         <DropdownMenuItem
                           onClick={() => handleSuspendUser(user)}
                           className="text-warning focus:text-warning"
@@ -710,7 +751,8 @@ export const UsersPage = () => {
                         </DropdownMenuItem>
                       )}
 
-                      {user.status === "Suspended" && (
+                      {/* Reactivate - Only for Users the current user can manage */}
+                      {user.status === "Suspended" && canManageUser(user.id) && (
                         <DropdownMenuItem
                           onClick={() => handleReactivateUser(user)}
                           className="text-success focus:text-success"
