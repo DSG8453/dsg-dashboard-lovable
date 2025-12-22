@@ -66,6 +66,14 @@ const AuthenticatedLayout = ({ children }) => {
 
 function AppRoutes() {
   const { user } = useAuth();
+  const location = useLocation();
+
+  // CRITICAL: Check for session_id in URL fragment synchronously during render
+  // This must happen BEFORE ProtectedRoute runs to prevent race conditions
+  // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
+  if (location.hash?.includes('session_id=')) {
+    return <AuthCallback />;
+  }
 
   return (
     <Routes>
