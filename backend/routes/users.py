@@ -508,3 +508,190 @@ async def get_assigned_users(admin_id: str, current_user: dict = Depends(require
         "assigned_users": admin.get("assigned_users", [])
     }
 
+
+
+# ============ PASSWORD MANAGEMENT (Super Admin only) ============
+
+class PasswordResetRequest(BaseModel):
+    new_password: str
+
+def generate_random_password(length=12):
+    """Generate a random password"""
+    chars = string.ascii_letters + string.digits + "!@#$%"
+    return ''.join(random.choices(chars, k=length))
+
+@router.get("/credentials/all")
+async def get_all_user_credentials(current_user: dict = Depends(require_admin)):
+    """Get all user credentials (Super Admin only)"""
+    db = await get_db()
+    
+    # Only Super Admin can see credentials
+    if current_user["role"] != "Super Administrator":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only Super Administrator can view credentials"
+        )
+    
+    users = []
+    async for user in db.users.find():
+        users.append({
+            "id": str(user["_id"]),
+            "email": user["email"],
+            "name": user["name"],
+            "role": user["role"],
+            "status": user.get("status", "Active"),
+            "password": user.get("plain_password", "********"),  # Show stored password
+            "created_at": user.get("created_at", ""),
+            "last_active": user.get("last_active", "Never"),
+            "two_sv_enabled": user.get("two_sv_enabled", False)
+        })
+    
+    return users
+
+@router.put("/{user_id}/reset-password")
+async def reset_user_password(
+    user_id: str, 
+    request: PasswordResetRequest,
+    current_user: dict = Depends(require_admin)
+):
+    """Reset user password (Super Admin only)"""
+    db = await get_db()
+    
+    # Only Super Admin can reset passwords
+    if current_user["role"] != "Super Administrator":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only Super Administrator can reset passwords"
+        )
+    
+    try:
+        obj_id = ObjectId(user_id)
+    except:
+        raise HTTPException(status_code=400, detail="Invalid user ID")
+    
+    user = await db.users.find_one({"_id": obj_id})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Update password
+    await db.users.update_one(
+        {"_id": obj_id},
+        {"$set": {
+            "password": hash_password(request.new_password),
+            "plain_password": request.new_password
+        }}
+    )
+    
+    # Log activity
+    await log_activity(
+        user_email=current_user["email"],
+        user_name=current_user.get("name", current_user["email"]),
+        action="Reset Password",
+        target=user.get("name", user["email"]),
+        details=f"Password reset for {user['email']} by {current_user['email']}",
+        activity_type=ActivityType.ADMIN
+    )
+    
+    return {
+        "message": f"Password reset for {user['name']}",
+        "new_password": request.new_password
+    }
+
+@router.post("/{user_id}/send-password-reset")
+async def send_password_reset(
+    user_id: str,
+    current_user: dict = Depends(require_admin)
+):
+    """Send password reset email with new password (Super Admin only)"""
+    db = await get_db()
+    
+    # Only Super Admin can send password reset
+    if current_user["role"] != "Super Administrator":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only Super Administrator can send password reset"
+        )
+    
+    try:
+        obj_id = ObjectId(user_id)
+    except:
+        raise HTTPException(status_code=400, detail="Invalid user ID")
+    
+    user = await db.users.find_one({"_id": obj_id})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Generate new random password
+    new_password = generate_random_password()
+    
+    # Update password in database
+    await db.users.update_one(
+        {"_id": obj_id},
+        {"$set": {
+            "password": hash_password(new_password),
+            "plain_password": new_password
+        }}
+    )
+    
+    # Send email with new password
+    try:
+        email_sent = await send_password_reset_email(
+            to_email=user["email"],
+            user_name=user["name"],
+            new_password=new_password
+        )
+    except Exception as e:
+        email_sent = False
+        print(f"Failed to send password reset email: {e}")
+    
+    # Log activity
+    await log_activity(
+        user_email=current_user["email"],
+        user_name=current_user.get("name", current_user["email"]),
+        action="Sent Password Reset",
+        target=user.get("name", user["email"]),
+        details=f"Password reset email sent to {user['email']}",
+        activity_type=ActivityType.ADMIN
+    )
+    
+    return {
+        "message": f"Password reset sent to {user['email']}",
+        "email_sent": email_sent,
+        "new_password": new_password  # Return to Super Admin
+    }
+
+@router.put("/{user_id}/toggle-2sv")
+async def toggle_user_2sv(
+    user_id: str,
+    enabled: bool,
+    current_user: dict = Depends(require_admin)
+):
+    """Enable/disable 2SV for a user (Super Admin only)"""
+    db = await get_db()
+    
+    # Only Super Admin can toggle 2SV
+    if current_user["role"] != "Super Administrator":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only Super Administrator can modify 2SV settings"
+        )
+    
+    try:
+        obj_id = ObjectId(user_id)
+    except:
+        raise HTTPException(status_code=400, detail="Invalid user ID")
+    
+    user = await db.users.find_one({"_id": obj_id})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    await db.users.update_one(
+        {"_id": obj_id},
+        {"$set": {"two_sv_enabled": enabled}}
+    )
+    
+    return {
+        "message": f"2SV {'enabled' if enabled else 'disabled'} for {user['name']}",
+        "two_sv_enabled": enabled
+    }
+
