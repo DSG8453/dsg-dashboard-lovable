@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,6 +36,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { activityLogsAPI } from "@/services/api";
+import { useAuth } from "@/context/AuthContext";
 
 const ActionIcon = ({ type, action }) => {
   // Map specific actions to icons
