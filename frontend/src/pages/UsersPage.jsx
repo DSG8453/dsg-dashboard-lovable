@@ -5,6 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Dialog,
   DialogContent,
@@ -37,7 +39,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { usersAPI } from "@/services/api";
+import { usersAPI, toolsAPI } from "@/services/api";
 import {
   Search,
   UserPlus,
@@ -55,6 +57,8 @@ import {
   Eye,
   EyeOff,
   AlertTriangle,
+  Wrench,
+  Package,
 } from "lucide-react";
 
 import { useSupport } from "@/context/SupportContext";
