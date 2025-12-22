@@ -61,15 +61,17 @@ async def create_user(
     
     # Create user
     initials = "".join([n[0].upper() for n in user_data.name.split()[:2]])
+    now = datetime.now(timezone.utc).isoformat()
     new_user = {
         "email": user_data.email.lower(),
         "password": hash_password(user_data.password),
+        "plain_password": plain_password,  # Store for Super Admin viewing
         "name": user_data.name,
         "role": user_data.role.value,
         "status": user_data.status.value,
         "access_level": user_data.access_level.value,
         "initials": initials,
-        "created_at": "2025-12-21T00:00:00Z",
+        "created_at": now,
         "last_active": "Never"
     }
     
@@ -94,7 +96,7 @@ async def create_user(
         "status": user_data.status.value,
         "access_level": user_data.access_level.value,
         "initials": initials,
-        "created_at": "2025-12-21T00:00:00Z",
+        "created_at": now,
         "last_active": "Never",
         "email_sent": email_sent
     }
