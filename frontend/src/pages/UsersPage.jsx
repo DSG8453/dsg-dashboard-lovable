@@ -273,6 +273,59 @@ export const UsersPage = () => {
     }
   };
 
+  // === User Assignment to Admin (Super Admin only) ===
+  const handleOpenAssignUsers = (admin) => {
+    setAssignUsersAdmin(admin);
+    setSelectedUsersToAssign(admin.assigned_users || []);
+    setAssignUsersDialogOpen(true);
+  };
+
+  const handleToggleUserAssignment = (userId) => {
+    setSelectedUsersToAssign(prev => {
+      if (prev.includes(userId)) {
+        return prev.filter(id => id !== userId);
+      } else {
+        return [...prev, userId];
+      }
+    });
+  };
+
+  const handleSaveUserAssignment = async () => {
+    if (!assignUsersAdmin) return;
+    
+    setIsSaving(true);
+    try {
+      await usersAPI.assignUsersToAdmin(assignUsersAdmin.id, selectedUsersToAssign);
+      // Update local state
+      setUsers(users.map(u => {
+        if (u.id === assignUsersAdmin.id) {
+          return { ...u, assigned_users: selectedUsersToAssign };
+        }
+        // Update managed_by for affected users
+        if (selectedUsersToAssign.includes(u.id)) {
+          return { ...u, managed_by: assignUsersAdmin.id };
+        }
+        if (u.managed_by === assignUsersAdmin.id && !selectedUsersToAssign.includes(u.id)) {
+          return { ...u, managed_by: null };
+        }
+        return u;
+      }));
+      toast.success(`Users assigned to ${assignUsersAdmin.name}`, {
+        description: `${selectedUsersToAssign.length} user(s) can now be managed by this Admin`
+      });
+      setAssignUsersDialogOpen(false);
+    } catch (error) {
+      toast.error(`Failed to assign users: ${error.message}`);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Get users that can be assigned to admins (only Users, not Admins or Super Admins)
+  const getAssignableUsers = () => {
+    return users.filter(u => u.role === "User");
+  };
+
   const filteredUsers = users.filter(
     (user) =>
       user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
