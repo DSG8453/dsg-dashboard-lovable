@@ -96,11 +96,13 @@ export const DashboardPage = ({ currentUser }) => {
     url: "",
     icon: "Globe",
   });
-  const [credentials, setCredentials] = useState({
-    label: "",
+  const [newCredentials, setNewCredentials] = useState({
     username: "",
     password: "",
+    login_url: "",
+    notes: "",
   });
+  const [showNewPassword, setShowNewPassword] = useState(false);
 
   const isSuperAdmin = user?.role === "Super Administrator";
   const isAdmin = user?.role === "Administrator";
