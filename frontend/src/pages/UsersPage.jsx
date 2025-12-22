@@ -696,23 +696,18 @@ export const UsersPage = () => {
                     </Button>
                   )}
 
-                  {/* Quick Access Level Change - Only Super Admin can change */}
-                  {isSuperAdmin && (
+                  {/* Role Change Dropdown - Super Admin only, not for primary Super Admin */}
+                  {isSuperAdmin && user.email !== "info@dsgtransport.net" && (
                     <Select
-                      value={user.access_level}
-                      onValueChange={(value) => handleChangeAccessLevel(user, value)}
+                      value={user.role}
+                      onValueChange={(value) => handleChangeRole(user, value)}
                     >
-                      <SelectTrigger className="w-32 h-9">
+                      <SelectTrigger className="w-28 h-9">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {accessLevels.map((level) => (
-                          <SelectItem key={level.value} value={level.value}>
-                            <div>
-                              <p className="font-medium">{level.label}</p>
-                            </div>
-                          </SelectItem>
-                        ))}
+                        <SelectItem value="Administrator">Admin</SelectItem>
+                        <SelectItem value="User">User</SelectItem>
                       </SelectContent>
                     </Select>
                   )}
@@ -731,6 +726,16 @@ export const UsersPage = () => {
                           <Edit className="mr-2 h-4 w-4" />
                           Edit User
                         </DropdownMenuItem>
+                      )}
+
+                      {/* Change Role (Super Admin only) */}
+                      {isSuperAdmin && user.email !== "info@dsgtransport.net" && (
+                        <>
+                          <DropdownMenuItem onClick={() => handleChangeRole(user, user.role === "Administrator" ? "User" : "Administrator")}>
+                            <Shield className="mr-2 h-4 w-4" />
+                            Make {user.role === "Administrator" ? "User" : "Admin"}
+                          </DropdownMenuItem>
+                        </>
                       )}
 
                       {/* Assign Users to Admin (Super Admin only) */}
