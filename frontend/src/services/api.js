@@ -225,6 +225,46 @@ export const activityLogsAPI = {
     }),
 };
 
+// IP Management API
+export const ipManagementAPI = {
+  // Global whitelist
+  getWhitelist: () => fetchAPI('/api/ip-management/whitelist'),
+  
+  addToWhitelist: (ipData) => 
+    fetchAPI('/api/ip-management/whitelist', {
+      method: 'POST',
+      body: JSON.stringify(ipData),
+    }),
+  
+  updateWhitelist: (id, ipData) => 
+    fetchAPI(`/api/ip-management/whitelist/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(ipData),
+    }),
+  
+  deleteFromWhitelist: (id) => 
+    fetchAPI(`/api/ip-management/whitelist/${id}`, { method: 'DELETE' }),
+  
+  // User IP settings
+  getUsersIPSettings: () => fetchAPI('/api/ip-management/users'),
+  
+  updateUserIPSettings: (userId, settings) => 
+    fetchAPI(`/api/ip-management/users/${userId}`, {
+      method: 'PUT',
+      body: JSON.stringify(settings),
+    }),
+  
+  addUserIP: (userId, ip) => 
+    fetchAPI(`/api/ip-management/users/${userId}/add-ip?ip=${encodeURIComponent(ip)}`, {
+      method: 'POST',
+    }),
+  
+  removeUserIP: (userId, ip) => 
+    fetchAPI(`/api/ip-management/users/${userId}/remove-ip/${encodeURIComponent(ip)}`, {
+      method: 'DELETE',
+    }),
+};
+
 export default {
   auth: authAPI,
   users: usersAPI,
