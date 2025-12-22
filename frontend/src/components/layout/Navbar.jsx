@@ -18,7 +18,10 @@ import {
   LayoutDashboard,
   User,
   Users,
+  Key,
+  Globe,
   Smartphone,
+  FileText,
   LogOut,
   Menu,
   ChevronDown,
@@ -34,7 +37,7 @@ export const Navbar = ({ currentUser }) => {
 
   // Role checks
   const isSuperAdmin = currentUser?.role === "Super Administrator";
-  const isAdmin = currentUser?.role === "Administrator" || isSuperAdmin;
+  const isAdmin = currentUser?.role === "Administrator";
   const isUser = currentUser?.role === "User";
   
   // Count open issues for badge
@@ -50,31 +53,23 @@ export const Navbar = ({ currentUser }) => {
 
   // Navigation items based on role
   const getNavigation = () => {
-    // Base navigation - Dashboard only for all users
-    const baseNav = [
+    // User only sees Dashboard
+    if (isUser) {
+      return [
+        { name: "Dashboard", href: "/", icon: LayoutDashboard },
+      ];
+    }
+
+    // Admin and Super Admin see full navigation
+    return [
       { name: "Dashboard", href: "/", icon: LayoutDashboard },
+      { name: "Profile", href: "/profile", icon: User },
+      { name: "Users", href: "/users", icon: Users },
+      { name: "Credentials", href: "/credentials", icon: Key },
+      { name: "IP Management", href: "/ip-management", icon: Globe },
+      { name: "Devices", href: "/devices", icon: Smartphone },
+      { name: "Activity Logs", href: "/activity-logs", icon: FileText },
     ];
-
-    // Super Admin sees everything
-    if (isSuperAdmin) {
-      return [
-        ...baseNav,
-        { name: "Users", href: "/users", icon: Users },
-        { name: "Devices", href: "/devices", icon: Smartphone },
-      ];
-    }
-
-    // Admin sees Users (to assign their tools) and Devices
-    if (isAdmin) {
-      return [
-        ...baseNav,
-        { name: "Users", href: "/users", icon: Users },
-        { name: "Devices", href: "/devices", icon: Smartphone },
-      ];
-    }
-
-    // Regular users only see Dashboard
-    return baseNav;
   };
 
   const navigation = getNavigation();
@@ -179,6 +174,15 @@ export const Navbar = ({ currentUser }) => {
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
+                
+                {/* Profile - Admin and Super Admin only */}
+                {(isAdmin || isSuperAdmin) && (
+                  <DropdownMenuItem onClick={() => navigate("/profile")}>
+                    <User className="mr-2 h-4 w-4" />
+                    Profile
+                  </DropdownMenuItem>
+                )}
+                
                 <DropdownMenuItem onClick={() => navigate("/issues")}>
                   <TicketIcon className="mr-2 h-4 w-4" />
                   {isSuperAdmin ? "All Issues" : "My Issues"}
@@ -188,12 +192,14 @@ export const Navbar = ({ currentUser }) => {
                     </Badge>
                   )}
                 </DropdownMenuItem>
+                
                 {isSuperAdmin && (
                   <DropdownMenuItem onClick={() => navigate("/support")}>
                     <HeadphonesIcon className="mr-2 h-4 w-4" />
                     Support Management
                   </DropdownMenuItem>
                 )}
+                
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onClick={handleLogout}
