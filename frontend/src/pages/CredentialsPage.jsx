@@ -369,7 +369,7 @@ export const CredentialsPage = () => {
                           <Send className="mr-2 h-4 w-4" />
                           Send Password Reset Email
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => copyToClipboard(
+                        <DropdownMenuItem onClick={() => handleCopy(
                           `Email: ${userItem.email}\nPassword: ${userItem.password}`,
                           "Credentials"
                         )}>
