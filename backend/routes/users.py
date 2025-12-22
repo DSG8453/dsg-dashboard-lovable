@@ -346,3 +346,112 @@ async def get_tool_access(user_id: str, current_user: dict = Depends(get_current
         "user_id": user_id,
         "allowed_tools": user.get("allowed_tools", [])
     }
+
+
+# Helper to check if current user can manage target user
+async def can_manage_user(current_user: dict, target_user_id: str, db) -> bool:
+    """Check if current user has permission to manage target user"""
+    if current_user["role"] == "Super Administrator":
+        return True
+    
+    if current_user["role"] == "Administrator":
+        # Admin can only manage users assigned to them
+        admin_data = await db.users.find_one({"_id": ObjectId(current_user["id"])})
+        assigned_users = admin_data.get("assigned_users", []) if admin_data else []
+        return target_user_id in assigned_users
+    
+    return False
+
+@router.put("/{admin_id}/assign-users")
+async def assign_users_to_admin(
+    admin_id: str,
+    user_ids: List[str],
+    current_user: dict = Depends(require_admin)
+):
+    """Assign users to an Admin (Super Admin only)"""
+    db = await get_db()
+    
+    # Only Super Admin can assign users to Admins
+    if current_user["role"] != "Super Administrator":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only Super Administrator can assign users to Admins"
+        )
+    
+    try:
+        admin_obj_id = ObjectId(admin_id)
+    except:
+        raise HTTPException(status_code=400, detail="Invalid admin ID")
+    
+    # Verify the target is an Admin
+    admin = await db.users.find_one({"_id": admin_obj_id})
+    if not admin:
+        raise HTTPException(status_code=404, detail="Admin not found")
+    
+    if admin.get("role") != "Administrator":
+        raise HTTPException(status_code=400, detail="Target user is not an Administrator")
+    
+    # Validate all user IDs exist and are Users (not Admins)
+    valid_user_ids = []
+    for uid in user_ids:
+        try:
+            user = await db.users.find_one({"_id": ObjectId(uid)})
+            if user and user.get("role") == "User":
+                valid_user_ids.append(uid)
+        except:
+            continue
+    
+    # Update Admin's assigned_users
+    await db.users.update_one(
+        {"_id": admin_obj_id},
+        {"$set": {"assigned_users": valid_user_ids}}
+    )
+    
+    # Update each user's managed_by field
+    # First, clear managed_by for users no longer assigned
+    await db.users.update_many(
+        {"managed_by": admin_id},
+        {"$unset": {"managed_by": ""}}
+    )
+    
+    # Set managed_by for newly assigned users
+    for uid in valid_user_ids:
+        await db.users.update_one(
+            {"_id": ObjectId(uid)},
+            {"$set": {"managed_by": admin_id}}
+        )
+    
+    # Log activity
+    await log_activity(
+        user_email=current_user["email"],
+        user_name=current_user.get("name", current_user["email"]),
+        action="Assigned Users to Admin",
+        target=admin.get("name", admin["email"]),
+        details=f"{len(valid_user_ids)} user(s) assigned to Admin {admin['email']}",
+        activity_type=ActivityType.ADMIN
+    )
+    
+    return {
+        "message": f"Users assigned to {admin['name']}",
+        "assigned_users": valid_user_ids
+    }
+
+@router.get("/{admin_id}/assigned-users")
+async def get_assigned_users(admin_id: str, current_user: dict = Depends(require_admin)):
+    """Get users assigned to an Admin"""
+    db = await get_db()
+    
+    try:
+        admin_obj_id = ObjectId(admin_id)
+    except:
+        raise HTTPException(status_code=400, detail="Invalid admin ID")
+    
+    admin = await db.users.find_one({"_id": admin_obj_id})
+    if not admin:
+        raise HTTPException(status_code=404, detail="Admin not found")
+    
+    return {
+        "admin_id": admin_id,
+        "assigned_users": admin.get("assigned_users", [])
+    }
+
