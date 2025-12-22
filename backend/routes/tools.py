@@ -3,46 +3,71 @@ from models.schemas import ToolCreate, ToolResponse
 from database import get_db
 from routes.auth import get_current_user, require_admin
 from bson import ObjectId
-from typing import List
+from typing import List, Optional
+from pydantic import BaseModel
 
 router = APIRouter()
 
+class ToolCredentials(BaseModel):
+    username: Optional[str] = None
+    password: Optional[str] = None
+    login_url: Optional[str] = None
+    notes: Optional[str] = None
+
+class ToolCreateWithCredentials(BaseModel):
+    name: str
+    category: str
+    description: str
+    icon: str = "Globe"
+    url: str = "#"
+    credentials: Optional[ToolCredentials] = None
+
 @router.get("", response_model=List[dict])
 async def get_tools(current_user: dict = Depends(get_current_user)):
-    """Get all tools"""
+    """Get all tools - credentials only visible to Super Admin"""
     db = await get_db()
+    
+    is_super_admin = current_user.get("role") == "Super Administrator"
     
     tools = []
     async for tool in db.tools.find():
-        # Count credentials for current user
-        cred_count = await db.credentials.count_documents({
-            "user_id": current_user["id"],
-            "tool_id": str(tool["_id"])
-        })
-        
-        tools.append({
+        tool_data = {
             "id": str(tool["_id"]),
             "name": tool["name"],
             "category": tool["category"],
             "description": tool["description"],
             "icon": tool.get("icon", "Globe"),
             "url": tool.get("url", "#"),
-            "credentials_count": cred_count
-        })
+            "has_credentials": bool(tool.get("credentials"))
+        }
+        
+        # Only Super Admin can see credentials
+        if is_super_admin and tool.get("credentials"):
+            tool_data["credentials"] = tool.get("credentials")
+        
+        tools.append(tool_data)
     
     return tools
 
 @router.post("", response_model=dict)
-async def create_tool(tool_data: ToolCreate, current_user: dict = Depends(require_admin)):
-    """Create a new tool (admin only)"""
+async def create_tool(tool_data: ToolCreateWithCredentials, current_user: dict = Depends(require_admin)):
+    """Create a new tool (Super Admin only can add credentials)"""
     db = await get_db()
+    
+    # Only Super Admin can create tools
+    if current_user.get("role") != "Super Administrator":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only Super Administrator can create tools"
+        )
     
     new_tool = {
         "name": tool_data.name,
         "category": tool_data.category,
         "description": tool_data.description,
         "icon": tool_data.icon,
-        "url": tool_data.url
+        "url": tool_data.url,
+        "credentials": tool_data.credentials.dict() if tool_data.credentials else None
     }
     
     result = await db.tools.insert_one(new_tool)
@@ -54,57 +79,84 @@ async def create_tool(tool_data: ToolCreate, current_user: dict = Depends(requir
         "description": tool_data.description,
         "icon": tool_data.icon,
         "url": tool_data.url,
-        "credentials_count": 0
+        "has_credentials": bool(tool_data.credentials),
+        "credentials": tool_data.credentials.dict() if tool_data.credentials else None
     }
 
 @router.get("/{tool_id}", response_model=dict)
 async def get_tool(tool_id: str, current_user: dict = Depends(get_current_user)):
-    """Get tool by ID"""
+    """Get tool by ID - credentials only for Super Admin"""
     db = await get_db()
     
-    tool = await db.tools.find_one({"_id": ObjectId(tool_id)})
+    try:
+        obj_id = ObjectId(tool_id)
+    except:
+        raise HTTPException(status_code=400, detail="Invalid tool ID")
+    
+    tool = await db.tools.find_one({"_id": obj_id})
     if not tool:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Tool not found"
         )
     
-    cred_count = await db.credentials.count_documents({
-        "user_id": current_user["id"],
-        "tool_id": tool_id
-    })
+    is_super_admin = current_user.get("role") == "Super Administrator"
     
-    return {
+    tool_data = {
         "id": str(tool["_id"]),
         "name": tool["name"],
         "category": tool["category"],
         "description": tool["description"],
         "icon": tool.get("icon", "Globe"),
         "url": tool.get("url", "#"),
-        "credentials_count": cred_count
+        "has_credentials": bool(tool.get("credentials"))
     }
+    
+    # Only Super Admin can see credentials
+    if is_super_admin and tool.get("credentials"):
+        tool_data["credentials"] = tool.get("credentials")
+    
+    return tool_data
 
 @router.put("/{tool_id}", response_model=dict)
-async def update_tool(tool_id: str, tool_data: ToolCreate, current_user: dict = Depends(require_admin)):
-    """Update tool (admin only)"""
+async def update_tool(tool_id: str, tool_data: ToolCreateWithCredentials, current_user: dict = Depends(require_admin)):
+    """Update tool (Super Admin only)"""
     db = await get_db()
     
-    tool = await db.tools.find_one({"_id": ObjectId(tool_id)})
+    # Only Super Admin can update tools
+    if current_user.get("role") != "Super Administrator":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only Super Administrator can update tools"
+        )
+    
+    try:
+        obj_id = ObjectId(tool_id)
+    except:
+        raise HTTPException(status_code=400, detail="Invalid tool ID")
+    
+    tool = await db.tools.find_one({"_id": obj_id})
     if not tool:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Tool not found"
         )
     
+    update_data = {
+        "name": tool_data.name,
+        "category": tool_data.category,
+        "description": tool_data.description,
+        "icon": tool_data.icon,
+        "url": tool_data.url,
+    }
+    
+    # Update credentials if provided
+    if tool_data.credentials:
+        update_data["credentials"] = tool_data.credentials.dict()
+    
     await db.tools.update_one(
-        {"_id": ObjectId(tool_id)},
-        {"$set": {
-            "name": tool_data.name,
-            "category": tool_data.category,
-            "description": tool_data.description,
-            "icon": tool_data.icon,
-            "url": tool_data.url
-        }}
+        {"_id": obj_id},
+        {"$set": update_data}
     )
     
     return {
@@ -114,15 +166,28 @@ async def update_tool(tool_id: str, tool_data: ToolCreate, current_user: dict = 
         "description": tool_data.description,
         "icon": tool_data.icon,
         "url": tool_data.url,
-        "credentials_count": 0
+        "has_credentials": bool(tool_data.credentials),
+        "credentials": tool_data.credentials.dict() if tool_data.credentials else None
     }
 
 @router.delete("/{tool_id}")
 async def delete_tool(tool_id: str, current_user: dict = Depends(require_admin)):
-    """Delete tool (admin only)"""
+    """Delete tool (Super Admin only)"""
     db = await get_db()
     
-    tool = await db.tools.find_one({"_id": ObjectId(tool_id)})
+    # Only Super Admin can delete tools
+    if current_user.get("role") != "Super Administrator":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only Super Administrator can delete tools"
+        )
+    
+    try:
+        obj_id = ObjectId(tool_id)
+    except:
+        raise HTTPException(status_code=400, detail="Invalid tool ID")
+    
+    tool = await db.tools.find_one({"_id": obj_id})
     if not tool:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -131,6 +196,30 @@ async def delete_tool(tool_id: str, current_user: dict = Depends(require_admin))
     
     # Delete all credentials for this tool
     await db.credentials.delete_many({"tool_id": tool_id})
-    await db.tools.delete_one({"_id": ObjectId(tool_id)})
+    await db.tools.delete_one({"_id": obj_id})
     
     return {"message": "Tool deleted successfully"}
+
+# Endpoint for Admin/User to get tool URL for direct access (no credentials)
+@router.get("/{tool_id}/access")
+async def get_tool_access_url(tool_id: str, current_user: dict = Depends(get_current_user)):
+    """Get tool URL for direct access - no credentials returned"""
+    db = await get_db()
+    
+    try:
+        obj_id = ObjectId(tool_id)
+    except:
+        raise HTTPException(status_code=400, detail="Invalid tool ID")
+    
+    tool = await db.tools.find_one({"_id": obj_id})
+    if not tool:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Tool not found"
+        )
+    
+    # Return only the URL for direct access
+    return {
+        "url": tool.get("url", "#"),
+        "name": tool["name"]
+    }
