@@ -1,12 +1,17 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from models.schemas import UserCreate, UserUpdate, UserResponse, UserStatus
 from utils.security import hash_password
+from utils.email_service import send_invitation_email, is_email_configured
 from database import get_db
 from routes.auth import get_current_user, require_admin
 from bson import ObjectId
 from typing import List
+import os
 
 router = APIRouter()
+
+# Get frontend URL for email links
+FRONTEND_URL = os.environ.get("FRONTEND_URL", "https://dsg-portal.preview.emergentagent.com")
 
 @router.get("", response_model=List[dict])
 async def get_users(current_user: dict = Depends(require_admin)):
