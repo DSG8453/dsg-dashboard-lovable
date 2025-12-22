@@ -72,6 +72,15 @@ export const usersAPI = {
   
   resendInvitation: (id) => 
     fetchAPI(`/api/users/${id}/resend-invitation`, { method: 'POST' }),
+  
+  getToolAccess: (id) => 
+    fetchAPI(`/api/users/${id}/tool-access`),
+  
+  updateToolAccess: (id, toolIds) => 
+    fetchAPI(`/api/users/${id}/tool-access`, {
+      method: 'PUT',
+      body: JSON.stringify(toolIds),
+    }),
 };
 
 // Tools API
