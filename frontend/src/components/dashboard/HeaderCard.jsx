@@ -5,7 +5,7 @@ import { useAuth } from "@/context/AuthContext";
 
 export const HeaderCard = ({ currentUser, onAddTool }) => {
   const { user } = useAuth();
-  const isAdmin = user?.role === "Administrator";
+  const isSuperAdmin = user?.role === "Super Administrator";
 
   return (
     <Card className="glass-card-strong border-2 border-border/50 shadow-lg mb-8">
@@ -31,8 +31,8 @@ export const HeaderCard = ({ currentUser, onAddTool }) => {
             </div>
           </div>
 
-          {/* Add Tool button - Admin only */}
-          {isAdmin && (
+          {/* Add Tool button - Super Admin only */}
+          {isSuperAdmin && onAddTool && (
             <Button variant="gradient" onClick={onAddTool} className="gap-2">
               <Plus className="h-4 w-4" />
               Add Tool
