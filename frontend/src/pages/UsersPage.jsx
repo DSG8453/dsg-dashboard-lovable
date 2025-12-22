@@ -670,8 +670,21 @@ export const UsersPage = () => {
 
                 {/* Actions */}
                 <div className="flex items-center gap-2">
-                  {/* Quick Tool Access Button - Only if can manage */}
-                  {user.role === "User" && canManageUser(user.id) && (
+                  {/* Quick Tool Access Button - Super Admin can assign to Admin & User */}
+                  {isSuperAdmin && (user.role === "User" || user.role === "Administrator") && user.email !== "info@dsgtransport.net" && (
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="gap-1 hidden sm:flex"
+                      onClick={() => handleOpenToolAccess(user)}
+                    >
+                      <Package className="h-4 w-4" />
+                      Tools
+                    </Button>
+                  )}
+
+                  {/* Admin can assign tools to Users they manage */}
+                  {!isSuperAdmin && isAdmin && user.role === "User" && canManageUser(user.id) && (
                     <Button 
                       variant="outline" 
                       size="sm" 
