@@ -4,6 +4,8 @@ from utils.security import hash_password
 from utils.email_service import send_invitation_email, is_email_configured
 from database import get_db
 from routes.auth import get_current_user, require_admin
+from routes.activity_logs import log_activity
+from models.activity_log import ActivityType
 from bson import ObjectId
 from typing import List
 import os
