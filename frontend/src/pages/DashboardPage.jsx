@@ -266,10 +266,10 @@ export const DashboardPage = ({ currentUser }) => {
 
   return (
     <div className="animate-fade-in">
-      <HeaderCard currentUser={currentUser} onAddTool={handleAddTool} />
+      <HeaderCard currentUser={currentUser} onAddTool={isSuperAdmin ? handleAddTool : null} />
 
-      {/* Stats Grid - Hidden for regular users */}
-      {!isRegularUser && (
+      {/* Stats Grid - Only for Super Admin */}
+      {isSuperAdmin && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8 stagger-children">
           {stats.map((stat, index) => (
             <StatCard key={index} {...stat} />
@@ -279,11 +279,18 @@ export const DashboardPage = ({ currentUser }) => {
 
       {/* Tools Section */}
       <div className="mb-6">
-        <h2 className="text-xl font-bold text-foreground mb-6">All Company Tools</h2>
+        <h2 className="text-xl font-bold text-foreground mb-6">
+          {isSuperAdmin ? "All Company Tools" : "My Assigned Tools"}
+        </h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 stagger-children">
           {tools.map((tool) => (
-            <ToolCard key={tool.id} tool={tool} onDelete={isAdmin ? handleDeleteTool : null} />
+            <ToolCard key={tool.id} tool={tool} onDelete={isSuperAdmin ? handleDeleteTool : null} />
           ))}
+          {tools.length === 0 && !isSuperAdmin && (
+            <div className="col-span-full text-center py-12 text-muted-foreground">
+              No tools assigned yet. Contact your administrator.
+            </div>
+          )}
         </div>
       </div>
 
