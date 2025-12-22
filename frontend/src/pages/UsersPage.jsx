@@ -449,10 +449,13 @@ export const UsersPage = () => {
           <p className="text-muted-foreground">Manage team members, access levels, and permissions</p>
         </div>
 
-        <Button variant="gradient" className="gap-2" onClick={() => setIsAddDialogOpen(true)}>
-          <UserPlus className="h-4 w-4" />
-          Add User
-        </Button>
+        {/* Only Super Admin can add new users */}
+        {isSuperAdmin && (
+          <Button variant="gradient" className="gap-2" onClick={() => setIsAddDialogOpen(true)}>
+            <UserPlus className="h-4 w-4" />
+            Add User
+          </Button>
+        )}
       </div>
 
       {/* Stats */}
