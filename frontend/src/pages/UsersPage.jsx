@@ -156,7 +156,7 @@ export const UsersPage = () => {
 
     setIsSaving(true);
     try {
-      const created = await usersAPI.create(newUser);
+      const created = await usersAPI.create(newUser, sendInvitationEmail);
       setUsers([...users, created]);
       
       // Store credentials to show in dialog
@@ -164,6 +164,7 @@ export const UsersPage = () => {
         name: newUser.name,
         email: newUser.email,
         password: newUser.password,
+        emailSent: created.email_sent,
       });
       
       setIsAddDialogOpen(false);
@@ -178,6 +179,8 @@ export const UsersPage = () => {
         status: "Active",
         access_level: "standard" 
       });
+      setExternalDomainApproved(false);
+      setSendInvitationEmail(true);
     } catch (error) {
       toast.error(`Failed to create user: ${error.message}`);
     } finally {
