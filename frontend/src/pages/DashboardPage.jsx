@@ -136,8 +136,8 @@ export const DashboardPage = ({ currentUser }) => {
 
         setTools(toolsWithIcons);
 
-        // Get users count if admin
-        if (user?.role === "Administrator") {
+        // Get users count if admin/super admin
+        if (user?.role === "Administrator" || user?.role === "Super Administrator") {
           try {
             const usersData = await usersAPI.getAll();
             setUsersCount(usersData.length);
