@@ -1106,67 +1106,81 @@ export const UsersPage = () => {
             </div>
 
             {/* Select All / Clear */}
-            <div className="flex items-center justify-between">
-              <Label className="text-sm font-medium">
-                Available Tools ({allTools.length})
-              </Label>
-              <Button 
-                variant="ghost" 
-                size="sm"
-                onClick={handleSelectAllTools}
-              >
-                {selectedTools.length === allTools.length ? "Clear All" : "Select All"}
-              </Button>
-            </div>
+            {(() => {
+              const assignableTools = getAssignableTools();
+              return (
+                <>
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm font-medium">
+                      {isSuperAdmin ? `All Tools (${assignableTools.length})` : `Your Assignable Tools (${assignableTools.length})`}
+                    </Label>
+                    <Button 
+                      variant="ghost" 
+                      size="sm"
+                      onClick={handleSelectAllTools}
+                    >
+                      {selectedTools.length >= assignableTools.length ? "Clear All" : "Select All"}
+                    </Button>
+                  </div>
 
-            {/* Tools List */}
-            <ScrollArea className="h-[300px] pr-4">
-              <div className="space-y-2">
-                {allTools.map((tool) => (
-                  <div
-                    key={tool.id}
-                    className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
-                      selectedTools.includes(tool.id) 
-                        ? "border-primary bg-primary/5" 
-                        : "border-border hover:bg-muted/50"
-                    }`}
-                    onClick={() => handleToggleTool(tool.id)}
-                  >
-                    <Checkbox 
-                      checked={selectedTools.includes(tool.id)}
-                      onCheckedChange={() => handleToggleTool(tool.id)}
-                    />
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium">{tool.name}</p>
-                      <p className="text-xs text-muted-foreground truncate">
-                        {tool.category} • {tool.description?.substring(0, 50)}...
-                      </p>
+                  {/* Info for Admin */}
+                  {isAdmin && !isSuperAdmin && (
+                    <p className="text-xs text-muted-foreground bg-muted/50 p-2 rounded">
+                      You can only assign tools that have been assigned to you by Super Admin.
+                    </p>
+                  )}
+
+                  {/* Tools List */}
+                  <ScrollArea className="h-[300px] pr-4">
+                    <div className="space-y-2">
+                      {assignableTools.length === 0 ? (
+                        <p className="text-center text-muted-foreground py-8">
+                          No tools available to assign. Contact Super Admin.
+                        </p>
+                      ) : (
+                        assignableTools.map((tool) => (
+                          <div
+                            key={tool.id}
+                            className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                              selectedTools.includes(tool.id) 
+                                ? "border-primary bg-primary/5" 
+                                : "border-border hover:bg-muted/50"
+                            }`}
+                            onClick={() => handleToggleTool(tool.id)}
+                          >
+                            <Checkbox 
+                              checked={selectedTools.includes(tool.id)}
+                              onCheckedChange={() => handleToggleTool(tool.id)}
+                            />
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium">{tool.name}</p>
+                              <p className="text-xs text-muted-foreground truncate">
+                                {tool.category} • {tool.description?.substring(0, 50)}...
+                              </p>
+                            </div>
+                            {selectedTools.includes(tool.id) && (
+                              <Check className="h-4 w-4 text-primary shrink-0" />
+                            )}
+                          </div>
+                        ))
+                      )}
                     </div>
-                    {selectedTools.includes(tool.id) && (
-                      <Check className="h-4 w-4 text-primary shrink-0" />
+                  </ScrollArea>
+
+                  {/* Summary */}
+                  <div className="p-3 rounded-lg bg-primary/5 border border-primary/20">
+                    <p className="text-sm">
+                      <span className="font-semibold text-primary">{selectedTools.length}</span> tool(s) will be accessible
+                    </p>
+                    {selectedTools.length === 0 && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        User will not see any tools on dashboard
+                      </p>
                     )}
                   </div>
-                ))}
-              </div>
-            </ScrollArea>
-
-            {/* Summary */}
-            <div className="p-3 rounded-lg bg-primary/5 border border-primary/20">
-              <p className="text-sm">
-                <span className="font-semibold text-primary">{selectedTools.length}</span> of{" "}
-                <span className="font-semibold">{allTools.length}</span> tools selected
-              </p>
-              {selectedTools.length === 0 && (
-                <p className="text-xs text-muted-foreground mt-1">
-                  User will not see any tools on dashboard
-                </p>
-              )}
-              {selectedTools.length === allTools.length && (
-                <p className="text-xs text-muted-foreground mt-1">
-                  User has access to all tools
-                </p>
-              )}
-            </div>
+                </>
+              );
+            })()}
 
             {/* Actions */}
             <div className="flex gap-3">
