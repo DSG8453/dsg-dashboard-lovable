@@ -184,7 +184,7 @@ export const DevicesPage = () => {
         <div>
           <h1 className="text-2xl font-bold text-foreground">Device Management</h1>
           <p className="text-muted-foreground">
-            {isAdmin 
+            {canManageDevices 
               ? "Approve and monitor devices used by team members"
               : "View your registered devices"
             }
@@ -196,8 +196,8 @@ export const DevicesPage = () => {
         </Button>
       </div>
 
-      {/* Stats - Admin Only */}
-      {isAdmin && (
+      {/* Stats - Admin/Super Admin Only */}
+      {canManageDevices && (
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-6">
           <Card className="border-2 border-border/50">
             <CardContent className="p-4 flex items-center gap-3">
@@ -249,8 +249,8 @@ export const DevicesPage = () => {
         </div>
       )}
 
-      {/* Pending Devices Alert - Admin Only */}
-      {isAdmin && pendingDevices.length > 0 && (
+      {/* Pending Devices Alert - Admin/Super Admin Only */}
+      {canManageDevices && pendingDevices.length > 0 && (
         <Card className="border-2 border-warning/50 bg-warning/5 mb-6">
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
@@ -268,8 +268,8 @@ export const DevicesPage = () => {
         </Card>
       )}
 
-      {/* Devices Tabs - Admin Only */}
-      {isAdmin ? (
+      {/* Devices Tabs - Admin/Super Admin Only */}
+      {canManageDevices ? (
         <Tabs defaultValue="pending" className="space-y-4">
           <TabsList>
             <TabsTrigger value="pending" className="gap-2">
