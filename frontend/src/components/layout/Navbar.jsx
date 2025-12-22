@@ -60,16 +60,22 @@ export const Navbar = ({ currentUser }) => {
       ];
     }
 
-    // Admin and Super Admin see full navigation
-    return [
+    // Base navigation for Admin
+    const baseNav = [
       { name: "Dashboard", href: "/", icon: LayoutDashboard },
       { name: "Profile", href: "/profile", icon: User },
       { name: "Users", href: "/users", icon: Users },
       { name: "Credentials", href: "/credentials", icon: Key },
       { name: "IP Management", href: "/ip-management", icon: Globe },
       { name: "Devices", href: "/devices", icon: Smartphone },
-      { name: "Activity Logs", href: "/activity-logs", icon: FileText },
     ];
+
+    // Super Admin gets Activity Logs
+    if (isSuperAdmin) {
+      baseNav.push({ name: "Activity Logs", href: "/activity-logs", icon: FileText });
+    }
+
+    return baseNav;
   };
 
   const navigation = getNavigation();
