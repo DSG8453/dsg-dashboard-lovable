@@ -7,6 +7,7 @@ import { SupportProvider } from "@/context/SupportContext";
 // Layout Components
 import { Navbar } from "@/components/layout/Navbar";
 import { WhatsAppSupport } from "@/components/support/WhatsAppSupport";
+import { DevicePendingApproval } from "@/components/auth/DevicePendingApproval";
 
 // Page Components
 import { LoginPage } from "@/pages/LoginPage";
@@ -20,9 +21,9 @@ import { ActivityLogsPage } from "@/pages/ActivityLogsPage";
 import { SupportManagementPage } from "@/pages/SupportManagementPage";
 import { IssuesPage } from "@/pages/IssuesPage";
 
-// Protected Route Component
-const ProtectedRoute = ({ children }) => {
-  const { isAuthenticated, isLoading } = useAuth();
+// Protected Route Component with Device Check
+const ProtectedRoute = ({ children, requireDeviceApproval = true }) => {
+  const { isAuthenticated, isLoading, isDeviceApproved, deviceStatus, user } = useAuth();
 
   if (isLoading) {
     return (
@@ -37,6 +38,11 @@ const ProtectedRoute = ({ children }) => {
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
+  }
+
+  // Check device approval (admins bypass this check)
+  if (requireDeviceApproval && !isDeviceApproved && deviceStatus) {
+    return <DevicePendingApproval />;
   }
 
   return children;
