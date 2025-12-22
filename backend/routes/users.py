@@ -287,6 +287,16 @@ async def update_tool_access(
         {"$set": {"allowed_tools": tool_ids}}
     )
     
+    # Log activity - Admin assigned tools to user
+    await log_activity(
+        user_email=current_user["email"],
+        user_name=current_user.get("name", current_user["email"]),
+        action="Assigned Tools",
+        target=user.get("name", user["email"]),
+        details=f"{len(tool_ids)} tool(s) assigned to {user['email']} by {current_user['email']}",
+        activity_type=ActivityType.ADMIN
+    )
+    
     return {
         "message": f"Tool access updated for {user['name']}",
         "allowed_tools": tool_ids
