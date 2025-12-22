@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,85 +28,21 @@ import {
   Settings,
   UserPlus,
   Key,
+  Loader2,
+  Ban,
+  Package,
+  AlertCircle,
 } from "lucide-react";
 import { toast } from "sonner";
+import { activityLogsAPI } from "@/services/api";
 
-const activityLogs = [
-  {
-    id: 1,
-    user: "admin@dsgtransport.com",
-    action: "Accessed",
-    tool: "Bitwarden",
-    time: "10 minutes ago",
-    ip: "192.168.1.100",
-    type: "access",
-  },
-  {
-    id: 2,
-    user: "john.smith@dsgtransport.com",
-    action: "Accessed",
-    tool: "Zoho Assist",
-    time: "1 hour ago",
-    ip: "192.168.1.105",
-    type: "access",
-  },
-  {
-    id: 3,
-    user: "sarah.johnson@dsgtransport.com",
-    action: "Accessed",
-    tool: "Ascend TMS",
-    time: "3 hours ago",
-    ip: "192.168.1.110",
-    type: "access",
-  },
-  {
-    id: 4,
-    user: "admin@dsgtransport.com",
-    action: "Added User",
-    tool: "System",
-    time: "5 hours ago",
-    ip: "192.168.1.100",
-    type: "admin",
-  },
-  {
-    id: 5,
-    user: "mike.davis@dsgtransport.com",
-    action: "Login",
-    tool: "Portal",
-    time: "6 hours ago",
-    ip: "10.0.0.55",
-    type: "auth",
-  },
-  {
-    id: 6,
-    user: "admin@dsgtransport.com",
-    action: "Password Reset",
-    tool: "System",
-    time: "1 day ago",
-    ip: "192.168.1.100",
-    type: "security",
-  },
-  {
-    id: 7,
-    user: "emily.brown@dsgtransport.com",
-    action: "Logout",
-    tool: "Portal",
-    time: "2 days ago",
-    ip: "172.16.0.25",
-    type: "auth",
-  },
-  {
-    id: 8,
-    user: "admin@dsgtransport.com",
-    action: "Updated Settings",
-    tool: "System",
-    time: "3 days ago",
-    ip: "192.168.1.100",
-    type: "admin",
-  },
-];
-
-const ActionIcon = ({ type }) => {
+const ActionIcon = ({ type, action }) => {
+  // Map specific actions to icons
+  if (action?.toLowerCase().includes("suspend")) return Ban;
+  if (action?.toLowerCase().includes("assigned") || action?.toLowerCase().includes("tool")) return Package;
+  if (action?.toLowerCase().includes("login")) return LogIn;
+  if (action?.toLowerCase().includes("logout")) return LogOut;
+  
   const icons = {
     access: Eye,
     auth: LogIn,
@@ -115,31 +51,87 @@ const ActionIcon = ({ type }) => {
     settings: Settings,
   };
   const Icon = icons[type] || Eye;
-  return <Icon className="h-4 w-4" />;
+  return Icon;
 };
 
 export const ActivityLogsPage = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterType, setFilterType] = useState("all");
+  const [activityLogs, setActivityLogs] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Fetch activity logs
+  const fetchLogs = async () => {
+    setIsLoading(true);
+    try {
+      const logs = await activityLogsAPI.getAll(100, filterType);
+      setActivityLogs(logs);
+    } catch (error) {
+      console.error("Failed to fetch activity logs:", error);
+      toast.error("Failed to load activity logs");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchLogs();
+  }, [filterType]);
 
   const filteredLogs = activityLogs.filter((log) => {
     const matchesSearch =
-      log.user.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      log.tool.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      log.action.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesType = filterType === "all" || log.type === filterType;
-    return matchesSearch && matchesType;
+      log.user?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      log.tool?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      log.action?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      log.details?.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesSearch;
   });
 
   const handleRefresh = () => {
+    fetchLogs();
     toast.success("Activity logs refreshed!");
   };
 
   const handleExport = () => {
-    toast.success("Exporting activity logs...", {
-      description: "CSV file will be downloaded shortly.",
+    // Export as CSV
+    if (filteredLogs.length === 0) {
+      toast.error("No logs to export");
+      return;
+    }
+
+    const csvContent = [
+      ["User", "Action", "Target", "Details", "Type", "IP", "Time"].join(","),
+      ...filteredLogs.map(log => [
+        log.user,
+        log.action,
+        log.tool,
+        log.details || "",
+        log.type,
+        log.ip,
+        log.time
+      ].map(field => `"${field}"`).join(","))
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `activity_logs_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+
+    toast.success("Activity logs exported!", {
+      description: "CSV file downloaded successfully.",
     });
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[50vh]">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="animate-fade-in">
@@ -147,7 +139,7 @@ export const ActivityLogsPage = () => {
         <div>
           <h1 className="text-2xl font-bold text-foreground">Activity Logs</h1>
           <p className="text-muted-foreground">
-            Monitor all user activity and tool access
+            Monitor all user activity and admin actions
           </p>
         </div>
 
@@ -196,7 +188,7 @@ export const ActivityLogsPage = () => {
               <TableRow className="bg-muted/50">
                 <TableHead className="font-semibold">User</TableHead>
                 <TableHead className="font-semibold">Action</TableHead>
-                <TableHead className="font-semibold">Tool</TableHead>
+                <TableHead className="font-semibold">Target</TableHead>
                 <TableHead className="font-semibold hidden md:table-cell">Time</TableHead>
                 <TableHead className="font-semibold hidden lg:table-cell">
                   IP Address
@@ -204,48 +196,69 @@ export const ActivityLogsPage = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredLogs.map((log) => (
-                <TableRow key={log.id} className="hover:bg-muted/30">
-                  <TableCell className="font-medium">{log.user}</TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <div
-                        className={`p-1.5 rounded-md ${
-                          log.type === "access"
-                            ? "bg-primary/10 text-primary"
-                            : log.type === "auth"
-                            ? "bg-success-light text-success"
-                            : log.type === "admin"
-                            ? "bg-admin-light text-admin"
-                            : "bg-warning-light text-warning"
-                        }`}
-                      >
-                        <ActionIcon type={log.type} />
+              {filteredLogs.map((log) => {
+                const IconComponent = ActionIcon({ type: log.type, action: log.action });
+                return (
+                  <TableRow key={log.id} className="hover:bg-muted/30">
+                    <TableCell>
+                      <div>
+                        <p className="font-medium">{log.user_name || log.user}</p>
+                        <p className="text-xs text-muted-foreground">{log.user}</p>
                       </div>
-                      <span>{log.action}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline">{log.tool}</Badge>
-                  </TableCell>
-                  <TableCell className="hidden md:table-cell text-muted-foreground">
-                    {log.time}
-                  </TableCell>
-                  <TableCell className="hidden lg:table-cell">
-                    <code className="text-xs bg-muted px-2 py-1 rounded">
-                      {log.ip}
-                    </code>
-                  </TableCell>
-                </TableRow>
-              ))}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <div
+                          className={`p-1.5 rounded-md ${
+                            log.type === "access"
+                              ? "bg-primary/10 text-primary"
+                              : log.type === "auth"
+                              ? "bg-success-light text-success"
+                              : log.type === "admin"
+                              ? "bg-admin-light text-admin"
+                              : "bg-warning-light text-warning"
+                          }`}
+                        >
+                          <IconComponent className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <span className="font-medium">{log.action}</span>
+                          {log.details && (
+                            <p className="text-xs text-muted-foreground truncate max-w-[200px]">
+                              {log.details}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline">{log.tool}</Badge>
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell text-muted-foreground">
+                      {log.time}
+                    </TableCell>
+                    <TableCell className="hidden lg:table-cell">
+                      <code className="text-xs bg-muted px-2 py-1 rounded">
+                        {log.ip || "N/A"}
+                      </code>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </CardContent>
       </Card>
 
-      {filteredLogs.length === 0 && (
+      {filteredLogs.length === 0 && !isLoading && (
         <div className="text-center py-12">
-          <p className="text-muted-foreground">No activity logs found matching your criteria.</p>
+          <AlertCircle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+          <p className="text-muted-foreground">
+            {searchQuery ? "No activity logs found matching your criteria." : "No activity logs recorded yet."}
+          </p>
+          <p className="text-sm text-muted-foreground mt-2">
+            Activity will appear here when admins suspend users or assign tools.
+          </p>
         </div>
       )}
     </div>
