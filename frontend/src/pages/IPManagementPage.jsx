@@ -61,6 +61,7 @@ import {
 
 export const IPManagementPage = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const isSuperAdmin = user?.role === "Super Administrator";
   
   // Global whitelist state
@@ -78,6 +79,14 @@ export const IPManagementPage = () => {
   const [userIPDialogOpen, setUserIPDialogOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   const [newUserIP, setNewUserIP] = useState("");
+
+  // Redirect non-Super Admin users
+  useEffect(() => {
+    if (user && !isSuperAdmin) {
+      toast.error("Access denied. Super Admin only.");
+      navigate("/");
+    }
+  }, [user, isSuperAdmin, navigate]);
 
   // Fetch data
   useEffect(() => {
