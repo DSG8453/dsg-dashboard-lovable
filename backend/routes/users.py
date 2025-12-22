@@ -223,9 +223,27 @@ async def suspend_user(user_id: str, current_user: dict = Depends(require_admin)
             detail="Cannot suspend your own account"
         )
     
+    # Get user info for logging
+    user = await db.users.find_one({"_id": ObjectId(user_id)})
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
     await db.users.update_one(
         {"_id": ObjectId(user_id)},
         {"$set": {"status": "Suspended"}}
+    )
+    
+    # Log activity - Admin suspended a user
+    await log_activity(
+        user_email=current_user["email"],
+        user_name=current_user.get("name", current_user["email"]),
+        action="Suspended User",
+        target=user.get("name", user["email"]),
+        details=f"User {user['email']} was suspended by {current_user['email']}",
+        activity_type=ActivityType.ADMIN
     )
     
     return {"message": "User suspended"}
