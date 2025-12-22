@@ -27,6 +27,7 @@ async def get_users(current_user: dict = Depends(require_admin)):
             "role": user["role"],
             "status": user.get("status", "Active"),
             "access_level": user.get("access_level", "standard"),
+            "allowed_tools": user.get("allowed_tools", []),  # List of tool IDs user can access
             "initials": user.get("initials", user["name"][:2].upper()),
             "last_active": user.get("last_active", "Never"),
             "created_at": user.get("created_at", "")
