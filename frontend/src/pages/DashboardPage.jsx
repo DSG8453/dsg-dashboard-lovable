@@ -109,12 +109,30 @@ export const DashboardPage = ({ currentUser }) => {
     const fetchData = async () => {
       try {
         const toolsData = await toolsAPI.getAll();
+        
         // Map icon string to actual component
-        const toolsWithIcons = toolsData.map(tool => ({
+        let toolsWithIcons = toolsData.map(tool => ({
           ...tool,
           icon: iconMap[tool.icon] || Globe,
           iconName: tool.icon,
         }));
+
+        // Filter tools based on user's allowed_tools (admins see all)
+        if (!isAdmin && user) {
+          try {
+            const accessData = await usersAPI.getToolAccess(user.id);
+            const allowedToolIds = accessData.allowed_tools || [];
+            
+            // If user has specific tools assigned, filter. If empty array, show all (default behavior)
+            if (allowedToolIds.length > 0) {
+              toolsWithIcons = toolsWithIcons.filter(tool => allowedToolIds.includes(tool.id));
+            }
+          } catch {
+            // If can't fetch access, show all tools (fallback)
+            console.log("Could not fetch tool access, showing all tools");
+          }
+        }
+
         setTools(toolsWithIcons);
 
         // Get users count if admin
@@ -137,7 +155,7 @@ export const DashboardPage = ({ currentUser }) => {
     if (user) {
       fetchData();
     }
-  }, [user]);
+  }, [user, isAdmin]);
 
   const stats = [
     { value: String(tools.length), label: "Active Tools", variant: "blue", icon: Wrench },
