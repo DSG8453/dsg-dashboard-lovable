@@ -29,13 +29,14 @@ def generate_otp():
 # Create temporary token for OTP flow
 def create_temp_token(user_id: str, email: str):
     from utils.security import create_access_token
+    from datetime import timedelta
     token_data = {
         "sub": user_id,
         "email": email,
         "type": "otp_pending"
     }
     # Short-lived token for OTP verification (5 minutes)
-    return create_access_token(token_data, expires_minutes=5)
+    return create_access_token(token_data, expires_delta=timedelta(minutes=5))
 
 @router.post("/login")
 async def login(request: LoginRequest):
