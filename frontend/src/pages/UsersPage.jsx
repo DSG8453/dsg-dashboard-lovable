@@ -171,6 +171,26 @@ export const UsersPage = () => {
     }
   };
 
+  // Get tools that current user can assign to others
+  // Super Admin can assign any tool
+  // Admin can only assign tools they have access to
+  const getAssignableTools = () => {
+    if (isSuperAdmin) {
+      return allTools;
+    }
+    if (isAdmin) {
+      // Get current user from users list to find their allowed_tools
+      const currentUserData = users.find(u => u.id === currentUser?.id);
+      const myAllowedTools = currentUserData?.allowed_tools || [];
+      // If admin has no specific tools assigned, they can't assign any
+      if (myAllowedTools.length === 0) {
+        return allTools; // Or return [] if you want to be strict
+      }
+      return allTools.filter(tool => myAllowedTools.includes(tool.id));
+    }
+    return [];
+  };
+
   const handleOpenToolAccess = (user) => {
     setToolAccessUser(user);
     setSelectedTools(user.allowed_tools || []);
@@ -178,6 +198,13 @@ export const UsersPage = () => {
   };
 
   const handleToggleTool = (toolId) => {
+    const assignableTools = getAssignableTools();
+    // Only allow toggling tools that the current user can assign
+    if (!assignableTools.find(t => t.id === toolId)) {
+      toast.error("You cannot assign this tool");
+      return;
+    }
+    
     setSelectedTools(prev => {
       if (prev.includes(toolId)) {
         return prev.filter(id => id !== toolId);
@@ -188,10 +215,15 @@ export const UsersPage = () => {
   };
 
   const handleSelectAllTools = () => {
-    if (selectedTools.length === allTools.length) {
-      setSelectedTools([]);
+    const assignableTools = getAssignableTools();
+    const assignableIds = assignableTools.map(t => t.id);
+    
+    if (selectedTools.filter(id => assignableIds.includes(id)).length === assignableTools.length) {
+      // Remove only assignable tools (keep any that admin can't control)
+      setSelectedTools(prev => prev.filter(id => !assignableIds.includes(id)));
     } else {
-      setSelectedTools(allTools.map(t => t.id));
+      // Add all assignable tools
+      setSelectedTools(prev => [...new Set([...prev, ...assignableIds])]);
     }
   };
 
