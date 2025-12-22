@@ -148,11 +148,11 @@ async def register_device(
         "last_login": now
     }
     
-    # Auto-approve for Super Admin and Admin
-    if current_user.get("role") in ["Super Administrator", "Administrator"]:
+    # Auto-approve ONLY for Super Admin
+    if current_user.get("role") == "Super Administrator":
         new_device["status"] = "approved"
         new_device["approved_at"] = now
-        new_device["approved_by"] = "Auto-approved (Admin)"
+        new_device["approved_by"] = "Auto-approved (Super Admin)"
     
     result = await db.devices.insert_one(new_device)
     
