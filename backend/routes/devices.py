@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from models.device import DeviceCreate, DeviceUpdate, DeviceStatus
 from database import get_db
-from routes.auth import get_current_user, require_admin
+from routes.auth import get_current_user, require_admin, require_super_admin
 from bson import ObjectId
 from typing import List
 from datetime import datetime, timezone
@@ -9,8 +9,8 @@ from datetime import datetime, timezone
 router = APIRouter()
 
 @router.get("", response_model=List[dict])
-async def get_all_devices(current_user: dict = Depends(require_admin)):
-    """Get all devices (admin only)"""
+async def get_all_devices(current_user: dict = Depends(require_super_admin)):
+    """Get all devices (Super Admin only)"""
     db = await get_db()
     
     devices = []
@@ -35,8 +35,8 @@ async def get_all_devices(current_user: dict = Depends(require_admin)):
     return devices
 
 @router.get("/pending", response_model=List[dict])
-async def get_pending_devices(current_user: dict = Depends(require_admin)):
-    """Get pending devices awaiting approval (admin only)"""
+async def get_pending_devices(current_user: dict = Depends(require_super_admin)):
+    """Get pending devices awaiting approval (Super Admin only)"""
     db = await get_db()
     
     devices = []
