@@ -163,6 +163,20 @@ async def register_device(
         "message": "Device registered" if new_device["status"] == "approved" else "Device pending approval"
     }
 
+# Helper to check if admin can manage a device
+async def can_admin_manage_device(current_user: dict, device: dict, db) -> bool:
+    """Check if admin can manage this device"""
+    if current_user["role"] == "Super Administrator":
+        return True
+    
+    if current_user["role"] == "Administrator":
+        # Admin can only manage devices for users assigned to them
+        admin_data = await db.users.find_one({"_id": ObjectId(current_user["id"])})
+        assigned_users = admin_data.get("assigned_users", []) if admin_data else []
+        return device.get("user_id") in assigned_users
+    
+    return False
+
 @router.put("/{device_id}/approve", response_model=dict)
 async def approve_device(device_id: str, current_user: dict = Depends(require_admin)):
     """Approve a device (admin only)"""
@@ -176,6 +190,13 @@ async def approve_device(device_id: str, current_user: dict = Depends(require_ad
     device = await db.devices.find_one({"_id": obj_id})
     if not device:
         raise HTTPException(status_code=404, detail="Device not found")
+    
+    # Check if Admin can manage this device
+    if not await can_admin_manage_device(current_user, device, db):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only manage devices for users assigned to you"
+        )
     
     now = datetime.now(timezone.utc).isoformat()
     await db.devices.update_one(
