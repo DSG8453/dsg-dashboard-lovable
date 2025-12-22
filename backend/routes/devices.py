@@ -258,16 +258,9 @@ async def revoke_device(device_id: str, current_user: dict = Depends(require_sup
     }
 
 @router.delete("/{device_id}")
-async def delete_device(device_id: str, current_user: dict = Depends(require_admin)):
+async def delete_device(device_id: str, current_user: dict = Depends(require_super_admin)):
     """Delete a device (Super Admin only)"""
     db = await get_db()
-    
-    # Only Super Admin can delete devices
-    if current_user["role"] != "Super Administrator":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only Super Administrator can delete devices"
-        )
     
     try:
         obj_id = ObjectId(device_id)
