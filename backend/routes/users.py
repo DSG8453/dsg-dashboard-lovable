@@ -1,14 +1,18 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from models.schemas import UserCreate, UserUpdate, UserResponse, UserStatus
 from utils.security import hash_password
-from utils.email_service import send_invitation_email, is_email_configured
+from utils.email_service import send_invitation_email, is_email_configured, send_password_reset_email
 from database import get_db
 from routes.auth import get_current_user, require_admin
 from routes.activity_logs import log_activity
 from models.activity_log import ActivityType
 from bson import ObjectId
 from typing import List
+from datetime import datetime, timezone
+from pydantic import BaseModel
 import os
+import random
+import string
 
 router = APIRouter()
 
