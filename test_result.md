@@ -4,57 +4,66 @@
 A full-stack management portal for DSG Transport LLC with:
 - FastAPI backend with MongoDB
 - React frontend with glassmorphism UI
-- JWT authentication
+- JWT authentication with 2-Step Verification (2SV)
 - Encrypted credential storage
+- Complex role-based access control (Super Admin > Admin > User)
 
 ## Test Credentials
-- **Admin:** admin@dsgtransport.com / admin123
-- **User 1:** john.smith@dsgtransport.com / john123  
-- **User 2:** sarah.johnson@dsgtransport.com / sarah123
+- **Super Admin:** info@dsgtransport.net / admin123 (requires 2SV OTP via email)
+- **Admin:** testadmin@dsgtransport.com / admin123 (no 2SV)
+- **User:** testuser@dsgtransport.com / user123
 
 ## Backend API Base URL
 Use REACT_APP_BACKEND_URL from /app/frontend/.env with /api prefix
 
 ## Features to Test
 
-### 1. Authentication
+### 1. Activity Log - Super Admin Only (NEW - PRIORITY)
+- [x] Backend: GET /api/activity-logs returns 403 for Admin (verified via curl)
+- [x] Frontend: Activity Logs tab hidden from Admin navbar (verified via screenshot)
+- [x] Frontend: Admin redirected to Dashboard when accessing /activity-logs directly
+- [ ] Backend: GET /api/activity-logs returns data for Super Admin
+- [ ] Frontend: Super Admin can see Activity Logs tab
+
+### 2. Authentication
 - [x] Login with valid credentials (admin)
+- [x] 2SV OTP sent to Super Admin email on login
 - [ ] Login with invalid credentials (should fail)
 - [ ] Logout functionality
 - [ ] Token persistence across page refreshes
+- [ ] 2SV OTP verification flow
 
-### 2. Dashboard
+### 3. Dashboard
 - [x] Tools load from database
 - [x] User count displays correctly
 - [ ] Add new tool functionality
-- [ ] Delete tool functionality (admin only)
+- [ ] Delete tool functionality (Super Admin only)
 
-### 3. Credentials Management
+### 4. User Management
+- [x] List all users
+- [ ] Create new user (Super Admin only)
+- [ ] Change user role (Super Admin only)
+- [ ] Assign users to Admin (Super Admin only)
+- [ ] Suspend user
+- [ ] Reactivate user
+- [ ] Delete user
+
+### 5. Credentials Management
 - [ ] Add credentials for a tool
 - [ ] View credentials (password masked)
 - [ ] Reveal password (decrypted from backend)
 - [ ] Update credentials
 - [ ] Delete credentials
 
-### 4. User Management (Admin)
-- [x] List all users
-- [ ] Create new user (invite)
-- [ ] Update user (role, status, access level)
-- [ ] Suspend user
-- [ ] Reactivate user
-- [ ] Delete user
-- [ ] Resend invitation
+### 6. IP Management (Super Admin)
+- [ ] View IP whitelist
+- [ ] Add IP to whitelist
+- [ ] Remove IP from whitelist
 
-### 5. Issues
-- [ ] Create new issue
-- [ ] View issues (admin sees all, user sees own)
-- [ ] AI Analysis (mock)
-- [ ] Resolve issue (admin)
-- [ ] Update issue status
-
-### 6. Settings
-- [ ] Get support settings
-- [ ] Update WhatsApp number (admin)
+### 7. Device Management
+- [ ] View devices
+- [ ] Approve/Reject devices
+- [ ] Suspend/Activate devices
 
 ## Testing Protocol
 - Run backend tests in /app/backend/tests/
@@ -62,7 +71,10 @@ Use REACT_APP_BACKEND_URL from /app/frontend/.env with /api prefix
 - Use Playwright for frontend E2E testing
 
 ## Incorporate User Feedback
-- None at this time
+- Activity Log should be visible to Super Admin ONLY (implemented)
 
 ## Last Test Result
-Initial testing - Frontend loads and connects to backend successfully
+Activity Log Super Admin restriction - VERIFIED:
+1. Backend returns 403 "Super Admin access required" for Admin users
+2. Frontend hides Activity Logs tab from Admin navbar
+3. Frontend redirects Admin to Dashboard when accessing /activity-logs directly
