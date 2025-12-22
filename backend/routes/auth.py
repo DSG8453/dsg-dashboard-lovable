@@ -331,3 +331,108 @@ async def get_me(current_user: dict = Depends(get_current_user)):
 async def logout(current_user: dict = Depends(get_current_user)):
     """Logout user (client should discard token)"""
     return {"message": "Logged out successfully"}
+
+
+# ============ GOOGLE OAUTH INTEGRATION ============
+import httpx
+
+class GoogleSessionRequest(BaseModel):
+    session_id: str
+
+@router.post("/google/session")
+async def google_oauth_session(request: GoogleSessionRequest):
+    """
+    Process Google OAuth session from Emergent Auth.
+    Verifies the Google email matches an existing user account.
+    """
+    db = await get_db()
+    
+    # Verify session with Emergent Auth
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(
+                "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data",
+                headers={"X-Session-ID": request.session_id},
+                timeout=10.0
+            )
+            
+            if response.status_code != 200:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid or expired session"
+                )
+            
+            google_data = response.json()
+        except httpx.RequestError as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to verify Google session: {str(e)}"
+            )
+    
+    # Extract Google user info
+    google_email = google_data.get("email", "").lower()
+    google_name = google_data.get("name", "")
+    google_picture = google_data.get("picture", "")
+    
+    if not google_email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No email returned from Google"
+        )
+    
+    # Find existing user by email
+    user = await db.users.find_one({"email": google_email})
+    
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"No account found for {google_email}. Please contact your administrator to create an account."
+        )
+    
+    # Check if user is suspended
+    if user.get("status") == "Suspended":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account is suspended. Please contact administrator."
+        )
+    
+    # Update user's picture if provided
+    if google_picture and google_picture != user.get("picture"):
+        await db.users.update_one(
+            {"_id": user["_id"]},
+            {"$set": {"picture": google_picture}}
+        )
+    
+    # Create JWT token (bypasses 2SV since Google already verified identity)
+    token_data = {
+        "sub": str(user["_id"]),
+        "email": user["email"],
+        "role": user["role"]
+    }
+    access_token = create_access_token(token_data)
+    
+    # Update last active
+    await db.users.update_one(
+        {"_id": user["_id"]},
+        {"$set": {"last_active": "Just now"}}
+    )
+    
+    # Return user info
+    user_response = {
+        "id": str(user["_id"]),
+        "email": user["email"],
+        "name": user["name"],
+        "role": user["role"],
+        "status": user.get("status", "Active"),
+        "access_level": user.get("access_level", "standard"),
+        "initials": user.get("initials", user["name"][:2].upper()),
+        "joined_date": user.get("created_at", ""),
+        "picture": google_picture or user.get("picture", "")
+    }
+    
+    return {
+        "access_token": access_token,
+        "user": user_response,
+        "login_method": "google"
+    }
+
