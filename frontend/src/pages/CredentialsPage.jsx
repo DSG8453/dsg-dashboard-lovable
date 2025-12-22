@@ -110,39 +110,54 @@ export const CredentialsPage = () => {
 
   // Copy to clipboard with fallback
   const copyToClipboard = async (text, label) => {
-    try {
-      // Try modern Clipboard API first
-      if (navigator.clipboard && window.isSecureContext) {
+    // Method 1: Try modern Clipboard API
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+      try {
         await navigator.clipboard.writeText(text);
         toast.success(`${label} copied to clipboard`);
         return;
-      }
-      
-      // Fallback for older browsers or restricted contexts
-      const textArea = document.createElement("textarea");
-      textArea.value = text;
-      textArea.style.position = "fixed";
-      textArea.style.left = "-999999px";
-      textArea.style.top = "-999999px";
-      document.body.appendChild(textArea);
-      textArea.focus();
-      textArea.select();
-      
-      try {
-        document.execCommand('copy');
-        toast.success(`${label} copied to clipboard`);
       } catch (err) {
-        // If all else fails, show a dialog with the text
-        toast.info(`Copy this ${label}: ${text}`, { duration: 5000 });
+        console.log("Clipboard API failed, trying fallback:", err);
       }
-      
-      document.body.removeChild(textArea);
+    }
+    
+    // Method 2: Fallback using textarea and execCommand
+    const textArea = document.createElement("textarea");
+    textArea.value = text;
+    
+    // Make the textarea invisible but in the viewport
+    textArea.style.position = "fixed";
+    textArea.style.top = "0";
+    textArea.style.left = "0";
+    textArea.style.width = "2em";
+    textArea.style.height = "2em";
+    textArea.style.padding = "0";
+    textArea.style.border = "none";
+    textArea.style.outline = "none";
+    textArea.style.boxShadow = "none";
+    textArea.style.background = "transparent";
+    textArea.style.opacity = "0";
+    
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    
+    try {
+      const successful = document.execCommand('copy');
+      if (successful) {
+        toast.success(`${label} copied to clipboard`);
+      } else {
+        throw new Error("execCommand returned false");
+      }
     } catch (err) {
-      // Final fallback - show toast with the text
+      console.log("execCommand failed:", err);
+      // Final fallback - show the text to copy manually
       toast.info(`${label}: ${text}`, { 
         duration: 8000,
-        description: "Click to dismiss after copying manually"
+        description: "Select and copy manually (Ctrl+C)"
       });
+    } finally {
+      document.body.removeChild(textArea);
     }
   };
 
