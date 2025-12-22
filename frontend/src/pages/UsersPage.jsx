@@ -158,6 +158,16 @@ export const UsersPage = () => {
     fetchTools();
   }, []);
 
+  // Fetch current admin's assigned users when component mounts (for Admin role)
+  useEffect(() => {
+    if (isAdmin && currentUser?.id) {
+      const currentUserData = users.find(u => u.id === currentUser.id);
+      if (currentUserData) {
+        setMyAssignedUsers(currentUserData.assigned_users || []);
+      }
+    }
+  }, [isAdmin, currentUser?.id, users]);
+
   const fetchUsers = async () => {
     try {
       const data = await usersAPI.getAll();
@@ -177,6 +187,13 @@ export const UsersPage = () => {
     } catch (error) {
       console.error("Failed to load tools:", error);
     }
+  };
+
+  // Check if current user can manage a specific user
+  const canManageUser = (userId) => {
+    if (isSuperAdmin) return true;
+    if (isAdmin) return myAssignedUsers.includes(userId);
+    return false;
   };
 
   // Get tools that current user can assign to others
