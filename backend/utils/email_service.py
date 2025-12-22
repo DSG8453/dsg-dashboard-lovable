@@ -181,3 +181,74 @@ def send_password_reset_email(to_email: str, user_name: str, new_password: str, 
     """
     
     return send_email(to_email, subject, html_content, text_content)
+
+
+async def send_otp_email(to_email: str, user_name: str, otp: str) -> bool:
+    """Send 2-Step Verification OTP email"""
+    subject = "🔐 DSG Transport Portal - Login Verification Code"
+    
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <style>
+            body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+            .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+            .header {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }}
+            .content {{ background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }}
+            .otp-box {{ background: white; padding: 30px; border-radius: 8px; margin: 20px 0; text-align: center; border: 2px dashed #667eea; }}
+            .otp-code {{ font-size: 36px; font-weight: bold; letter-spacing: 8px; color: #667eea; }}
+            .warning {{ background: #fff3cd; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #ffc107; }}
+            .footer {{ text-align: center; color: #666; font-size: 12px; margin-top: 20px; }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1>🔐 Login Verification</h1>
+                <p>2-Step Verification Code</p>
+            </div>
+            <div class="content">
+                <p>Hello <strong>{user_name}</strong>,</p>
+                <p>You're trying to sign in to your DSG Transport Portal account. Use this verification code to complete your login:</p>
+                
+                <div class="otp-box">
+                    <p style="margin: 0; color: #666;">Your verification code is:</p>
+                    <p class="otp-code">{otp}</p>
+                </div>
+                
+                <div class="warning">
+                    <p style="margin: 0;"><strong>⚠️ Important:</strong></p>
+                    <ul style="margin: 10px 0 0 0; padding-left: 20px;">
+                        <li>This code will expire in <strong>5 minutes</strong></li>
+                        <li>Never share this code with anyone</li>
+                        <li>If you didn't request this, please ignore this email</li>
+                    </ul>
+                </div>
+                
+                <div class="footer">
+                    <p>This is an automated security message from DSG Transport LLC</p>
+                    <p>© 2025 DSG Transport LLC. All rights reserved.</p>
+                </div>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+    
+    text_content = f"""
+    Login Verification - DSG Transport Portal
+    
+    Hello {user_name},
+    
+    Your verification code is: {otp}
+    
+    This code will expire in 5 minutes.
+    
+    If you didn't request this code, please ignore this email.
+    
+    - DSG Transport LLC
+    """
+    
+    return send_email(to_email, subject, html_content, text_content)
+
