@@ -134,3 +134,24 @@ async def notify_refresh_dashboard(user_emails: List[str], reason: str = ""):
         "reason": reason,
         "message": "Please refresh to see updates"
     })
+
+
+async def notify_tool_created(tool_name: str, tool_id: str):
+    """Broadcast to all connected users when a new tool is created"""
+    await manager.broadcast({
+        "type": NotificationType.TOOL_CREATED,
+        "tool_id": tool_id,
+        "tool_name": tool_name,
+        "message": f"New tool '{tool_name}' has been added"
+    })
+
+
+async def notify_tool_updated(tool_name: str, tool_id: str):
+    """Broadcast to all connected users when a tool is updated"""
+    await manager.broadcast({
+        "type": NotificationType.REFRESH_DASHBOARD,
+        "tool_id": tool_id,
+        "tool_name": tool_name,
+        "reason": "tool_updated",
+        "message": f"Tool '{tool_name}' has been updated"
+    })
