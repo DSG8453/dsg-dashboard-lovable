@@ -155,6 +155,10 @@ export const toolsAPI = {
   // Secure access - request one-time access token
   requestSecureAccess: (toolId) =>
     fetchAPI(`/api/secure-access/${toolId}/request-access`, { method: 'POST' }),
+  
+  // Gateway access - access tool through dashboard proxy
+  startGatewaySession: (toolId) =>
+    fetchAPI(`/api/gateway/start/${toolId}`, { method: 'POST' }),
 };
 
 // Credentials API
