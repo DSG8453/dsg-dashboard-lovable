@@ -42,11 +42,17 @@ Use REACT_APP_BACKEND_URL from /app/frontend/.env with /api prefix
 ### 4. User Management
 - [x] List all users
 - [ ] Create new user (Super Admin only)
-- [ ] Change user role (Super Admin only)
+- [x] Change user role (Super Admin only) - VERIFIED via UI and API
 - [ ] Assign users to Admin (Super Admin only)
 - [ ] Suspend user
 - [ ] Reactivate user
 - [ ] Delete user
+
+### 5. Device Management (Super Admin only)
+- [x] View devices - VERIFIED
+- [x] Devices page loads correctly
+- [ ] Approve/Reject devices
+- [ ] Revoke devices
 
 ### 5. Credentials Management
 - [ ] Add credentials for a tool
