@@ -93,8 +93,8 @@ async def start_gateway_session(
 
 
 @router.get("/view/{session_token}")
-async def view_tool_gateway(session_token: str, current_user: dict = Depends(get_current_user)):
-    """View tool through the gateway - embedded in dashboard"""
+async def view_tool_gateway(session_token: str):
+    """View tool through the gateway - session token is the auth"""
     session_hash = hashlib.sha256(session_token.encode()).hexdigest()
     session = gateway_sessions.get(session_hash)
     
