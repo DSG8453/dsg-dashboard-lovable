@@ -105,6 +105,36 @@ export const ToolCard = ({ tool, onDelete, onUpdate }) => {
   const isSuperAdmin = user?.role === "Super Administrator";
   const hasCredentials = tool.has_credentials || (tool.credentials && (tool.credentials.username || tool.credentials.password));
 
+  // Handle Gateway Access - opens tool within dashboard (secure, no external access)
+  const handleGatewayAccess = async () => {
+    setIsAccessingTool(true);
+    
+    try {
+      // Start gateway session
+      const response = await toolsAPI.startGatewaySession(tool.id);
+      
+      if (response.gateway_url) {
+        const backendUrl = process.env.REACT_APP_BACKEND_URL || '';
+        const gatewayUrl = `${backendUrl}${response.gateway_url}`;
+        
+        toast.success(`Opening ${tool.name}`, {
+          description: "Secure gateway access - credentials protected",
+          icon: <Shield className="h-4 w-4" />,
+        });
+        
+        // Open gateway in new window
+        window.open(gatewayUrl, "_blank", "width=1200,height=800,noopener");
+      }
+    } catch (error) {
+      console.error("Failed to start gateway:", error);
+      toast.error("Failed to access tool", {
+        description: error.message || "Please contact Super Admin",
+      });
+    } finally {
+      setIsAccessingTool(false);
+    }
+  };
+
   // Handle secure tool access - credentials handled by backend
   const handleAccess = async () => {
     setIsAccessingTool(true);
