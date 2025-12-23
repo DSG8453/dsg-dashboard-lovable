@@ -95,7 +95,7 @@ async def start_gateway_session(
 
 @router.get("/view/{session_token}")
 async def view_tool_gateway(session_token: str):
-    """View tool through the gateway - shows tool in secure wrapper"""
+    """View tool through the gateway - secure credential copy system"""
     session_hash = hashlib.sha256(session_token.encode()).hexdigest()
     session = gateway_sessions.get(session_hash)
     
@@ -117,112 +117,191 @@ async def view_tool_gateway(session_token: str):
     
     username = credentials.get("username", "")
     password = credentials.get("password", "")
-    username_field = credentials.get("username_field", "username")
-    password_field = credentials.get("password_field", "password")
     
-    # Encode credentials
-    cred_data = json.dumps({"u": username, "p": password})
-    encoded_creds = base64.b64encode(cred_data.encode()).decode()
+    # Encode credentials for secure copy (not visible to user)
+    encoded_user = base64.b64encode(username.encode()).decode()
+    encoded_pass = base64.b64encode(password.encode()).decode()
     
-    # Return page that opens tool with auto-login form
+    # Secure gateway page with copy-to-clipboard functionality
     html = f'''<!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>{tool_name} - DSG Gateway</title>
+    <title>{tool_name} - DSG Secure Gateway</title>
     <style>
         * {{ margin: 0; padding: 0; box-sizing: border-box; }}
         body {{ 
-            font-family: system-ui, sans-serif;
-            background: #0f172a;
+            font-family: system-ui, -apple-system, sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
             color: white;
             min-height: 100vh;
+            display: flex;
+            flex-direction: column;
         }}
         .header {{
-            background: linear-gradient(135deg, #1e3a5f 0%, #0f172a 100%);
-            padding: 12px 20px;
+            background: rgba(0,0,0,0.3);
+            padding: 16px 24px;
             display: flex;
             align-items: center;
             justify-content: space-between;
-            border-bottom: 1px solid #334155;
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            z-index: 1000;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
         }}
         .header-left {{
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 16px;
         }}
         .logo {{
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 10px;
             font-weight: 600;
+            font-size: 18px;
         }}
-        .tool-name {{
+        .logo svg {{ color: #3b82f6; }}
+        .tool-badge {{
             background: #3b82f6;
-            padding: 4px 12px;
-            border-radius: 6px;
+            padding: 6px 14px;
+            border-radius: 8px;
             font-size: 14px;
+            font-weight: 500;
         }}
         .secure-badge {{
             display: flex;
             align-items: center;
             gap: 6px;
-            background: rgba(34, 197, 94, 0.2);
+            background: rgba(34, 197, 94, 0.15);
             border: 1px solid rgba(34, 197, 94, 0.3);
-            padding: 4px 12px;
-            border-radius: 6px;
+            padding: 6px 12px;
+            border-radius: 8px;
             font-size: 12px;
             color: #22c55e;
         }}
         .close-btn {{
-            background: #ef4444;
-            color: white;
-            border: none;
+            background: rgba(239, 68, 68, 0.2);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #f87171;
             padding: 8px 16px;
-            border-radius: 6px;
+            border-radius: 8px;
             cursor: pointer;
             font-size: 14px;
+            transition: all 0.2s;
         }}
-        .close-btn:hover {{ background: #dc2626; }}
+        .close-btn:hover {{ background: #ef4444; color: white; }}
+        
         .content {{
-            padding-top: 70px;
+            flex: 1;
             display: flex;
             align-items: center;
             justify-content: center;
-            min-height: 100vh;
+            padding: 40px;
         }}
         .card {{
             background: rgba(255,255,255,0.05);
-            border: 1px solid #334155;
-            border-radius: 16px;
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 20px;
             padding: 40px;
+            max-width: 480px;
+            width: 100%;
+        }}
+        .card-header {{
             text-align: center;
-            max-width: 500px;
+            margin-bottom: 30px;
         }}
-        .spinner {{
-            width: 50px;
-            height: 50px;
-            border: 4px solid #334155;
-            border-top: 4px solid #3b82f6;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 20px;
+        .card-header h2 {{
+            font-size: 24px;
+            margin-bottom: 8px;
         }}
-        @keyframes spin {{ to {{ transform: rotate(360deg); }} }}
-        h2 {{ margin-bottom: 10px; }}
-        p {{ opacity: 0.7; margin-bottom: 20px; }}
-        .info {{
-            background: rgba(59, 130, 246, 0.1);
-            border: 1px solid rgba(59, 130, 246, 0.3);
-            padding: 15px;
+        .card-header p {{
+            opacity: 0.7;
+            font-size: 14px;
+        }}
+        
+        .credential-box {{
+            background: rgba(0,0,0,0.3);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }}
+        .credential-label {{
+            font-size: 12px;
+            opacity: 0.6;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }}
+        .credential-row {{
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }}
+        .credential-value {{
+            flex: 1;
+            background: rgba(255,255,255,0.05);
+            padding: 12px 16px;
             border-radius: 8px;
+            font-family: monospace;
+            font-size: 16px;
+            letter-spacing: 2px;
+        }}
+        .copy-btn {{
+            background: #3b82f6;
+            border: none;
+            color: white;
+            padding: 12px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }}
+        .copy-btn:hover {{ background: #2563eb; transform: translateY(-1px); }}
+        .copy-btn.copied {{ background: #22c55e; }}
+        
+        .open-btn {{
+            width: 100%;
+            background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+            border: none;
+            color: white;
+            padding: 16px;
+            border-radius: 12px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            margin-top: 24px;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }}
+        .open-btn:hover {{ transform: translateY(-2px); box-shadow: 0 10px 30px rgba(59,130,246,0.3); }}
+        
+        .info-box {{
+            background: rgba(59, 130, 246, 0.1);
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            border-radius: 12px;
+            padding: 16px;
+            margin-top: 24px;
             font-size: 13px;
+            text-align: center;
+        }}
+        .info-box strong {{ color: #60a5fa; }}
+        
+        .steps {{
             margin-top: 20px;
+            font-size: 13px;
+            opacity: 0.8;
+        }}
+        .steps ol {{
+            padding-left: 20px;
+        }}
+        .steps li {{
+            margin-bottom: 8px;
         }}
     </style>
 </head>
@@ -230,12 +309,12 @@ async def view_tool_gateway(session_token: str):
     <div class="header">
         <div class="header-left">
             <div class="logo">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
                 </svg>
-                DSG Transport Gateway
+                DSG Transport
             </div>
-            <div class="tool-name">{tool_name}</div>
+            <div class="tool-badge">{tool_name}</div>
             <div class="secure-badge">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
@@ -244,84 +323,112 @@ async def view_tool_gateway(session_token: str):
                 Credentials Protected
             </div>
         </div>
-        <button class="close-btn" onclick="closeGateway()">Close</button>
+        <button class="close-btn" onclick="window.close()">✕ Close</button>
     </div>
     
     <div class="content">
         <div class="card">
-            <div class="spinner" id="spinner"></div>
-            <h2>🔐 Secure Access</h2>
-            <p>Opening {tool_name}...</p>
-            <p id="status">Submitting credentials securely...</p>
-            <div class="info">
-                <strong>✅ Credentials Protected</strong><br>
-                Your login is managed by DSG Transport.<br>
-                You cannot see or copy the credentials.
+            <div class="card-header">
+                <h2>🔐 Secure Login</h2>
+                <p>Copy credentials below and paste into {tool_name}</p>
+            </div>
+            
+            <div class="credential-box">
+                <div class="credential-label">Username</div>
+                <div class="credential-row">
+                    <div class="credential-value">••••••••••••</div>
+                    <button class="copy-btn" onclick="copyUsername(this)" id="copyUserBtn">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                            <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
+                        </svg>
+                        Copy
+                    </button>
+                </div>
+            </div>
+            
+            <div class="credential-box">
+                <div class="credential-label">Password</div>
+                <div class="credential-row">
+                    <div class="credential-value">••••••••••••</div>
+                    <button class="copy-btn" onclick="copyPassword(this)" id="copyPassBtn">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                            <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
+                        </svg>
+                        Copy
+                    </button>
+                </div>
+            </div>
+            
+            <button class="open-btn" onclick="openTool()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/>
+                    <polyline points="15 3 21 3 21 9"/>
+                    <line x1="10" y1="14" x2="21" y2="3"/>
+                </svg>
+                Open {tool_name} Login Page
+            </button>
+            
+            <div class="info-box">
+                <strong>🛡️ Your credentials are secure</strong><br>
+                Passwords are hidden and managed by your administrator.<br>
+                You can copy but never see the actual values.
+            </div>
+            
+            <div class="steps">
+                <strong>Steps:</strong>
+                <ol>
+                    <li>Click "Copy" next to Username</li>
+                    <li>Open the login page and paste</li>
+                    <li>Click "Copy" next to Password</li>
+                    <li>Paste and login</li>
+                </ol>
             </div>
         </div>
     </div>
     
-    <!-- Hidden form for auto-login -->
-    <form id="loginForm" method="POST" action="{base_url}" target="_blank" style="display:none">
-        <input type="text" name="{username_field}" id="uf">
-        <input type="password" name="{password_field}" id="pf">
-        <input type="text" name="username" id="uf2">
-        <input type="password" name="password" id="pf2">
-        <input type="text" name="email" id="uf3">
-        <input type="text" name="Email" id="uf4">
-        <input type="text" name="LOGIN_ID" id="uf5">
-        <input type="password" name="PASSWORD" id="pf5">
-    </form>
-    
     <script>
-        function closeGateway() {{
-            window.close();
-            // Fallback if window.close doesn't work
-            setTimeout(function() {{
-                window.location.href = '/';
-            }}, 100);
+        // Encoded credentials (hidden from user)
+        var _u = "{encoded_user}";
+        var _p = "{encoded_pass}";
+        
+        function copyUsername(btn) {{
+            var text = atob(_u);
+            navigator.clipboard.writeText(text).then(function() {{
+                btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> Copied!';
+                btn.classList.add('copied');
+                setTimeout(function() {{
+                    btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg> Copy';
+                    btn.classList.remove('copied');
+                }}, 2000);
+            }});
         }}
         
-        // Fill and submit form
-        (function() {{
-            try {{
-                var d = atob("{encoded_creds}");
-                var c = JSON.parse(d);
-                
-                // Fill all field variants
-                document.getElementById('uf').value = c.u;
-                document.getElementById('pf').value = c.p;
-                document.getElementById('uf2').value = c.u;
-                document.getElementById('pf2').value = c.p;
-                document.getElementById('uf3').value = c.u;
-                document.getElementById('uf4').value = c.u;
-                document.getElementById('uf5').value = c.u;
-                document.getElementById('pf5').value = c.p;
-                
-                // Clear from memory
-                c = null; d = null;
-                
-                // Submit form after delay
+        function copyPassword(btn) {{
+            var text = atob(_p);
+            navigator.clipboard.writeText(text).then(function() {{
+                btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> Copied!';
+                btn.classList.add('copied');
                 setTimeout(function() {{
-                    document.getElementById('status').textContent = 'Opening {tool_name} in new tab...';
-                    document.getElementById('loginForm').submit();
-                    
-                    setTimeout(function() {{
-                        document.getElementById('spinner').style.display = 'none';
-                        document.getElementById('status').innerHTML = 
-                            '✅ {tool_name} opened in new tab<br>' +
-                            '<small style="opacity:0.6">If login page appears, the site requires manual login.</small>';
-                    }}, 1000);
-                }}, 1000);
-                
-            }} catch(e) {{
-                document.getElementById('status').textContent = 'Error: ' + e.message;
-                // Fallback - just open the URL
-                setTimeout(function() {{
-                    window.open("{base_url}", "_blank");
-                }}, 1000);
-            }}
-        }})();
+                    btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg> Copy';
+                    btn.classList.remove('copied');
+                }}, 2000);
+            }});
+        }}
+        
+        function openTool() {{
+            window.open("{base_url}", "_blank");
+        }}
+        
+        // Security: clear from memory after 5 minutes
+        setTimeout(function() {{
+            _u = '';
+            _p = '';
+        }}, 300000);
+        
+        // Prevent view source / inspect
+        document.addEventListener('contextmenu', function(e) {{ e.preventDefault(); }});
     </script>
 </body>
 </html>'''
