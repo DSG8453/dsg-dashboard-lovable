@@ -93,8 +93,8 @@ async def request_tool_access(
 @router.get("/launch/{access_token}")
 async def launch_tool(access_token: str):
     """
-    Launch tool with secure auto-login.
-    Credentials are completely hidden - just auto-submits form.
+    Launch tool with hidden auto-login.
+    Immediately submits form - no visible page.
     """
     token_hash = hashlib.sha256(access_token.encode()).hexdigest()
     token_data = access_tokens.get(token_hash)
@@ -127,89 +127,32 @@ async def launch_tool(access_token: str):
     username_field = credentials.get("username_field", "username")
     password_field = credentials.get("password_field", "password")
     
-    # Encode credentials for secure injection
-    cred_data = {
-        "u": username,
-        "p": password,
-        "uf": username_field,
-        "pf": password_field
-    }
-    enc_creds = base64.b64encode(json.dumps(cred_data).encode()).decode()
-    
-    # Generate minimal auto-login page - credentials NEVER visible
+    # Create a minimal page that immediately submits the form
+    # The form posts directly to the login URL with credentials
     html_content = f'''<!DOCTYPE html>
 <html>
 <head>
-    <title>Connecting...</title>
-    <meta charset="UTF-8">
-    <meta name="robots" content="noindex,nofollow">
-    <style>
-        *{{margin:0;padding:0;box-sizing:border-box}}
-        body{{
-            font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
-            min-height:100vh;
-            background:#0f172a;
-            display:flex;
-            align-items:center;
-            justify-content:center;
-            color:white;
-        }}
-        .c{{text-align:center;padding:40px}}
-        .s{{
-            width:40px;height:40px;
-            border:3px solid rgba(255,255,255,0.2);
-            border-top-color:#3b82f6;
-            border-radius:50%;
-            animation:spin 1s linear infinite;
-            margin:0 auto 16px;
-        }}
-        @keyframes spin{{to{{transform:rotate(360deg)}}}}
-        p{{font-size:14px;opacity:0.8}}
-        .h{{position:absolute;left:-9999px;opacity:0}}
-    </style>
+<meta charset="UTF-8">
+<title>Redirecting...</title>
+<style>body{{margin:0;padding:50px;font-family:sans-serif;background:#0f172a;color:#fff;text-align:center}}
+.l{{width:30px;height:30px;border:3px solid #333;border-top:3px solid #3b82f6;border-radius:50%;animation:s 1s linear infinite;margin:20px auto}}
+@keyframes s{{to{{transform:rotate(360deg)}}}}</style>
 </head>
 <body>
-    <div class="c">
-        <div class="s"></div>
-        <p>Connecting to {tool_name}...</p>
-    </div>
-    
-    <div class="h">
-        <form id="f" method="POST" action="{login_url}">
-            <input name="{username_field}" id="u">
-            <input type="password" name="{password_field}" id="p">
-            <input name="username" id="u2">
-            <input type="password" name="password" id="p2">
-            <input name="email" id="u3">
-            <input name="LOGIN_ID" id="u4">
-            <input type="password" name="PASSWORD" id="p4">
-        </form>
-    </div>
-    <script>
-    (function(){{
-        var D="{enc_creds}";
-        try{{
-            var C=JSON.parse(atob(D));
-            // Fill all form fields
-            document.getElementById('u').value=C.u;
-            document.getElementById('p').value=C.p;
-            document.getElementById('u2').value=C.u;
-            document.getElementById('p2').value=C.p;
-            document.getElementById('u3').value=C.u;
-            document.getElementById('u4').value=C.u;
-            document.getElementById('p4').value=C.p;
-            // Clear from memory
-            C=null;D=null;
-            // Submit form immediately
-            setTimeout(function(){{document.getElementById('f').submit()}},300);
-        }}catch(e){{
-            window.location.href="{login_url}";
-        }}
-    }})();
-    // Block inspection
-    document.addEventListener('contextmenu',function(e){{e.preventDefault()}});
-    document.onkeydown=function(e){{if(e.keyCode==123||((e.ctrlKey||e.metaKey)&&e.shiftKey&&(e.keyCode==73||e.keyCode==74)))return false}};
-    </script>
+<div class="l"></div>
+<p>Connecting to {tool_name}...</p>
+<form id="f" method="POST" action="{login_url}" style="display:none">
+<input type="hidden" name="{username_field}" value="{username}">
+<input type="hidden" name="{password_field}" value="{password}">
+<input type="hidden" name="username" value="{username}">
+<input type="hidden" name="password" value="{password}">
+<input type="hidden" name="email" value="{username}">
+<input type="hidden" name="Email" value="{username}">
+<input type="hidden" name="LOGIN_ID" value="{username}">
+<input type="hidden" name="PASSWORD" value="{password}">
+<input type="hidden" name="Pass" value="{password}">
+</form>
+<script>document.getElementById('f').submit();</script>
 </body>
 </html>'''
     
