@@ -487,6 +487,42 @@ export const ToolCard = ({ tool, onDelete, onUpdate }) => {
                   </div>
                 </div>
 
+                {/* Advanced Form Field Configuration */}
+                <div className="p-3 rounded-lg bg-muted/50 border">
+                  <p className="text-xs font-medium text-muted-foreground mb-2">
+                    Form Field Names (for auto-login)
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Username Field</Label>
+                      <Input
+                        value={editForm.credentials.username_field || "username"}
+                        onChange={(e) => setEditForm({
+                          ...editForm, 
+                          credentials: {...editForm.credentials, username_field: e.target.value}
+                        })}
+                        placeholder="username"
+                        className="h-8 text-sm"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Password Field</Label>
+                      <Input
+                        value={editForm.credentials.password_field || "password"}
+                        onChange={(e) => setEditForm({
+                          ...editForm, 
+                          credentials: {...editForm.credentials, password_field: e.target.value}
+                        })}
+                        placeholder="password"
+                        className="h-8 text-sm"
+                      />
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    These are the HTML form input names used on the login page (e.g., "email", "Email", "LOGIN_ID")
+                  </p>
+                </div>
+
                 <div className="space-y-2">
                   <Label className="flex items-center gap-2">
                     <FileText className="h-3 w-3" />
