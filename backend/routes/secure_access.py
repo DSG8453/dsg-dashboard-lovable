@@ -3,7 +3,7 @@ Secure Tool Access Service - Zero Visibility Credentials
 Credentials are NEVER shown to users - login happens automatically in background
 """
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi.responses import HTMLResponse, RedirectResponse
 from database import get_db
 from routes.auth import get_current_user
 from bson import ObjectId
@@ -11,18 +11,12 @@ from datetime import datetime, timezone, timedelta
 import secrets
 import hashlib
 import base64
-import os
 import json
-import httpx
-import re
 
 router = APIRouter()
 
 # Store one-time access tokens
 access_tokens = {}
-
-# Store session cookies for tools
-tool_sessions = {}
 
 
 @router.post("/{tool_id}/request-access")
@@ -85,9 +79,7 @@ async def request_tool_access(
         "created_at": datetime.now(timezone.utc).isoformat()
     })
     
-    # Prepare response - credentials are NEVER exposed directly
-    # They are only passed through the secure launch URL
-    response_data = {
+    return {
         "access_token": access_token,
         "access_url": f"/api/secure-access/launch/{access_token}",
         "tool_name": tool.get("name"),
@@ -95,8 +87,6 @@ async def request_tool_access(
         "login_url": login_url,
         "expires_in": 300
     }
-    
-    return response_data
 
 
 @router.get("/launch/{access_token}")
@@ -140,7 +130,7 @@ async def launch_tool(access_token: str):
     cred_json = json.dumps({"u": username, "p": password})
     encoded_creds = base64.b64encode(cred_json.encode()).decode()
     
-    # Simple HTML page that submits a form with credentials
+    # HTML page that submits a form with credentials to the login URL
     html = f'''<!DOCTYPE html>
 <html>
 <head>
@@ -194,103 +184,6 @@ window.location.href="{login_url}";
 </html>'''
     
     return HTMLResponse(content=html)
-            }
-            
-            # Get cookies from the initial request
-            cookies = dict(login_page.cookies)
-            
-            login_response = await client.post(
-                login_url,
-                data=form_data,
-                headers=headers,
-                cookies=cookies
-            )
-            
-            # Check if login was successful
-            # Usually successful login redirects to a dashboard or different page
-            final_url = str(login_response.url)
-            
-            # Collect all cookies from the session
-            all_cookies = dict(login_response.cookies)
-            for cookie_name, cookie_value in login_page.cookies.items():
-                if cookie_name not in all_cookies:
-                    all_cookies[cookie_name] = cookie_value
-            
-            # If we got cookies, create a redirect page that sets them
-            if all_cookies:
-                # Create a page that redirects with session info
-                cookie_script = ""
-                for name, value in all_cookies.items():
-                    # Set cookies via JavaScript
-                    cookie_script += f'document.cookie="{name}={value};path=/;";'
-                
-                redirect_html = f'''<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<title>Logging in...</title>
-<style>
-body{{margin:0;padding:50px;font-family:sans-serif;background:#0f172a;color:#fff;text-align:center}}
-.l{{width:30px;height:30px;border:3px solid #333;border-top:3px solid #22c55e;border-radius:50%;animation:s 1s linear infinite;margin:20px auto}}
-@keyframes s{{to{{transform:rotate(360deg)}}}}
-</style>
-</head>
-<body>
-<div class="l"></div>
-<p>Logging into {tool_name}...</p>
-<script>
-// Redirect to the final URL
-setTimeout(function(){{
-    window.location.href="{final_url}";
-}}, 500);
-</script>
-</body>
-</html>'''
-                return HTMLResponse(content=redirect_html)
-            else:
-                # No cookies, just redirect to the result
-                return RedirectResponse(url=final_url, status_code=302)
-                
-    except Exception as e:
-        # If server-side login fails, fall back to simple form POST
-        print(f"Server-side login failed: {e}")
-        
-        # Encode credentials to hide them
-        cred_data = base64.b64encode(json.dumps({"u": username, "p": password}).encode()).decode()
-        
-        fallback_html = f'''<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<title>Connecting...</title>
-<style>body{{margin:0;padding:50px;font-family:sans-serif;background:#0f172a;color:#fff;text-align:center}}
-.l{{width:30px;height:30px;border:3px solid #333;border-top:3px solid #3b82f6;border-radius:50%;animation:s 1s linear infinite;margin:20px auto}}
-@keyframes s{{to{{transform:rotate(360deg)}}}}</style>
-</head>
-<body>
-<div class="l"></div>
-<p>Connecting to {tool_name}...</p>
-<form id="f" method="POST" action="{login_url}" style="display:none">
-<input type="hidden" name="{username_field}" id="u1">
-<input type="hidden" name="{password_field}" id="p1">
-<input type="hidden" name="username" id="u2">
-<input type="hidden" name="password" id="p2">
-</form>
-<script>
-var d="{cred_data}";
-try{{
-var c=JSON.parse(atob(d));
-document.getElementById('u1').value=c.u;
-document.getElementById('p1').value=c.p;
-document.getElementById('u2').value=c.u;
-document.getElementById('p2').value=c.p;
-c=null;d=null;
-document.getElementById('f').submit();
-}}catch(e){{window.location.href="{login_url}";}}
-</script>
-</body>
-</html>'''
-        return HTMLResponse(content=fallback_html)
 
 
 def get_error_page(title: str, message: str) -> str:
