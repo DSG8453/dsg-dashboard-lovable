@@ -195,6 +195,14 @@ async def delete_tool(tool_id: str, current_user: dict = Depends(require_admin))
             detail="Tool not found"
         )
     
+    # Get list of affected users BEFORE deleting
+    affected_users = await db.users.find(
+        {"allowed_tools": tool_id},
+        {"email": 1}
+    ).to_list(1000)
+    affected_emails = [u["email"] for u in affected_users]
+    tool_name = tool["name"]
+    
     # Delete all credentials for this tool
     await db.credentials.delete_many({"tool_id": tool_id})
     
@@ -207,7 +215,11 @@ async def delete_tool(tool_id: str, current_user: dict = Depends(require_admin))
     # Delete the tool
     await db.tools.delete_one({"_id": obj_id})
     
-    return {"message": f"Tool '{tool['name']}' deleted successfully and removed from all users"}
+    # Notify all affected users in real-time
+    if affected_emails:
+        await notify_tool_deleted(affected_emails, tool_name, tool_id)
+    
+    return {"message": f"Tool '{tool_name}' deleted successfully and removed from all users"}
 
 # Endpoint for Admin/User to get tool URL for direct access (no credentials)
 @router.get("/{tool_id}/access")
