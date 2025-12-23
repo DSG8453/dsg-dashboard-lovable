@@ -136,6 +136,7 @@ export const UsersPage = () => {
   const [assignUsersDialogOpen, setAssignUsersDialogOpen] = useState(false);
   const [assignUsersAdmin, setAssignUsersAdmin] = useState(null);
   const [selectedUsersToAssign, setSelectedUsersToAssign] = useState([]);
+  const [userAssignSearch, setUserAssignSearch] = useState("");
 
   // Get assigned users for current admin
   const [myAssignedUsers, setMyAssignedUsers] = useState([]);
