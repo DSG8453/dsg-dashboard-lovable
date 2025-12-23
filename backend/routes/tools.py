@@ -172,7 +172,7 @@ async def update_tool(tool_id: str, tool_data: ToolCreateWithCredentials, curren
 
 @router.delete("/{tool_id}")
 async def delete_tool(tool_id: str, current_user: dict = Depends(require_admin)):
-    """Delete tool (Super Admin only)"""
+    """Delete tool (Super Admin only) - Also removes from all users' allowed_tools"""
     db = await get_db()
     
     # Only Super Admin can delete tools
@@ -196,9 +196,17 @@ async def delete_tool(tool_id: str, current_user: dict = Depends(require_admin))
     
     # Delete all credentials for this tool
     await db.credentials.delete_many({"tool_id": tool_id})
+    
+    # Remove tool from ALL users' allowed_tools arrays
+    await db.users.update_many(
+        {"allowed_tools": tool_id},
+        {"$pull": {"allowed_tools": tool_id}}
+    )
+    
+    # Delete the tool
     await db.tools.delete_one({"_id": obj_id})
     
-    return {"message": "Tool deleted successfully"}
+    return {"message": f"Tool '{tool['name']}' deleted successfully and removed from all users"}
 
 # Endpoint for Admin/User to get tool URL for direct access (no credentials)
 @router.get("/{tool_id}/access")
