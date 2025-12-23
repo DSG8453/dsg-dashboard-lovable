@@ -510,6 +510,22 @@ export const UsersPage = () => {
     }
   };
 
+  // Change user role (Super Admin only)
+  const handleChangeRole = async (user, newRole) => {
+    // Don't change if same role
+    if (user.role === newRole) return;
+    
+    try {
+      await usersAPI.changeRole(user.id, newRole);
+      setUsers(users.map((u) => u.id === user.id ? { ...u, role: newRole } : u));
+      toast.success(`Role updated`, {
+        description: `${user.name} is now ${newRole === "Administrator" ? "an Administrator" : "a User"}.`,
+      });
+    } catch (error) {
+      toast.error(`Failed to change role: ${error.message}`);
+    }
+  };
+
   const getStatusBadge = (status) => {
     const variants = {
       Active: "active",
