@@ -131,18 +131,10 @@ export const ToolCard = ({ tool, onDelete, onUpdate }) => {
     } catch (error) {
       console.error("Failed to access tool:", error);
       
-      // Fallback to direct URL if secure access fails
-      const fallbackUrl = tool.credentials?.login_url || tool.url;
-      if (fallbackUrl && fallbackUrl !== "#") {
-        toast.warning("Opening tool directly", {
-          description: "Secure access unavailable, opening login page",
-        });
-        window.open(fallbackUrl, "_blank", "noopener,noreferrer");
-      } else {
-        toast.error("Failed to access tool", {
-          description: error.message || "Please try again or contact admin",
-        });
-      }
+      // Don't expose any URLs - just show error
+      toast.error("Failed to access tool", {
+        description: "Please contact Super Admin for assistance",
+      });
     } finally {
       setIsAccessingTool(false);
     }
