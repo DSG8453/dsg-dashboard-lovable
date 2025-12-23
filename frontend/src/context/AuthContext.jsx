@@ -1,6 +1,7 @@
-import { createContext, useContext, useState, useEffect, useCallback } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
 import { authAPI, credentialsAPI, devicesAPI } from "@/services/api";
 import { getDeviceInfo, setStoredDeviceStatus, clearStoredDeviceStatus } from "@/utils/deviceFingerprint";
+import { useWebSocket, NotificationType } from "@/hooks/useWebSocket";
 
 const AuthContext = createContext(null);
 
@@ -10,6 +11,44 @@ export const AuthProvider = ({ children }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [deviceStatus, setDeviceStatus] = useState(null); // 'pending', 'approved', 'rejected', 'revoked'
   const [deviceInfo, setDeviceInfo] = useState(null);
+  const [dashboardRefreshKey, setDashboardRefreshKey] = useState(0);
+  
+  // Callback for WebSocket messages
+  const handleWebSocketMessage = useCallback((data) => {
+    console.log('[Auth] WebSocket message:', data);
+    
+    switch (data.type) {
+      case NotificationType.TOOL_ACCESS_UPDATED:
+      case NotificationType.TOOL_DELETED:
+      case NotificationType.TOOL_CREATED:
+      case NotificationType.REFRESH_DASHBOARD:
+        // Trigger dashboard refresh
+        setDashboardRefreshKey(prev => prev + 1);
+        break;
+        
+      case NotificationType.ROLE_CHANGED:
+        // Update user role and refresh
+        if (data.new_role) {
+          setUser(prev => prev ? { ...prev, role: data.new_role } : prev);
+        }
+        setDashboardRefreshKey(prev => prev + 1);
+        break;
+        
+      case NotificationType.USER_SUSPENDED:
+        // Force logout
+        setTimeout(() => {
+          logout();
+          window.location.href = '/login';
+        }, 3000);
+        break;
+        
+      default:
+        break;
+    }
+  }, []);
+  
+  // Initialize WebSocket connection
+  const { isConnected: wsConnected } = useWebSocket(token, handleWebSocketMessage);
 
   // Logout function
   const logout = useCallback(() => {
