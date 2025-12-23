@@ -496,12 +496,12 @@ async def assign_users_to_admin(
     if admin.get("role") != "Administrator":
         raise HTTPException(status_code=400, detail="Target user is not an Administrator")
     
-    # Validate all user IDs exist and are Users (not Admins)
+    # Validate all user IDs exist (allow Users and other Admins, but not Super Admins or self)
     valid_user_ids = []
     for uid in user_ids:
         try:
             user = await db.users.find_one({"_id": ObjectId(uid)})
-            if user and user.get("role") == "User":
+            if user and user.get("role") != "Super Administrator" and uid != admin_id:
                 valid_user_ids.append(uid)
         except:
             continue
