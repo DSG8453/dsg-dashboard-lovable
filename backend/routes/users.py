@@ -741,7 +741,7 @@ async def change_user_role(
     
     try:
         obj_id = ObjectId(user_id)
-    except:
+    except Exception:
         raise HTTPException(status_code=400, detail="Invalid user ID")
     
     user = await db.users.find_one({"_id": obj_id})
@@ -771,6 +771,11 @@ async def change_user_role(
         details=f"Role changed from {old_role} to {new_role} for {user['email']}",
         activity_type=ActivityType.ADMIN
     )
+    
+    # Notify user in real-time about role change
+    user_email = user.get("email")
+    if user_email:
+        await notify_role_changed(user_email, new_role)
     
     return {
         "message": f"Role updated for {user['name']}",
