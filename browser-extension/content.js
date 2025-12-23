@@ -1,192 +1,316 @@
 // DSG Transport Secure Login - Content Script
-// Runs on every page to auto-fill credentials
+// Auto-fills credentials on login pages
 
 (function() {
-  // Check for pending login
-  chrome.runtime.sendMessage({ action: 'GET_PENDING_LOGIN' }, (pending) => {
-    if (!pending) return;
-    
-    const currentUrl = window.location.href;
-    const pendingHost = new URL(pending.url).hostname;
-    const currentHost = window.location.hostname;
-    
-    // Check if we're on the right domain
-    if (!currentHost.includes(pendingHost.split('.').slice(-2).join('.'))) {
-      return;
-    }
-    
-    // Check if credentials are still fresh (< 5 minutes)
-    if (Date.now() - pending.timestamp > 300000) {
-      chrome.runtime.sendMessage({ action: 'CLEAR_PENDING_LOGIN' });
-      return;
-    }
-    
-    console.log('DSG Transport: Attempting auto-fill for', pending.toolName);
-    
-    // Wait for page to fully load
-    setTimeout(() => fillCredentials(pending), 1500);
-  });
+  'use strict';
+  
+  console.log('[DSG Extension] Content script loaded on:', window.location.href);
+  
+  // Wait for page to be ready, then check for pending login
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initAutoFill);
+  } else {
+    initAutoFill();
+  }
+  
+  function initAutoFill() {
+    // Small delay to ensure page is fully rendered
+    setTimeout(checkAndFillCredentials, 1000);
+  }
+  
+  function checkAndFillCredentials() {
+    chrome.runtime.sendMessage({ action: 'GET_PENDING_LOGIN' }, (pending) => {
+      if (chrome.runtime.lastError) {
+        console.log('[DSG Extension] Error getting pending login:', chrome.runtime.lastError);
+        return;
+      }
+      
+      if (!pending) {
+        console.log('[DSG Extension] No pending login for this page');
+        return;
+      }
+      
+      console.log('[DSG Extension] Found pending login for:', pending.toolName);
+      
+      // Check if credentials are still fresh (< 5 minutes)
+      if (Date.now() - pending.timestamp > 5 * 60 * 1000) {
+        console.log('[DSG Extension] Pending login expired');
+        chrome.runtime.sendMessage({ action: 'CLEAR_PENDING_LOGIN' });
+        return;
+      }
+      
+      // Try to fill credentials
+      fillCredentials(pending);
+    });
+  }
   
   function fillCredentials(creds) {
-    // Extensive list of username field selectors
-    const usernameSelectors = [
-      `input[name="${creds.usernameField}"]`,
-      `input[id="${creds.usernameField}"]`,
-      'input[name*="user" i]',
-      'input[name*="email" i]',
-      'input[name*="login" i]',
-      'input[id*="user" i]',
-      'input[id*="email" i]',
-      'input[id*="login" i]',
-      'input[type="email"]',
-      'input[placeholder*="email" i]',
-      'input[placeholder*="user" i]',
-      'input[placeholder*="login" i]',
-      'input[name="LOGIN_ID"]',
-      'input[name="username"]',
-      'input[name="email"]',
-      'input[name="Email"]',
-      'input[autocomplete="username"]',
-      'input[autocomplete="email"]',
-      'input[name*="txtUser" i]',
-      'input[id*="txtUser" i]'
-    ];
+    console.log('[DSG Extension] Attempting to fill credentials...');
     
-    // Extensive list of password field selectors
-    const passwordSelectors = [
-      `input[name="${creds.passwordField}"]`,
-      `input[id="${creds.passwordField}"]`,
-      'input[type="password"]',
-      'input[name*="pass" i]',
-      'input[id*="pass" i]',
-      'input[name="PASSWORD"]',
-      'input[name="password"]',
-      'input[autocomplete="current-password"]',
-      'input[name*="txtPass" i]',
-      'input[id*="txtPass" i]'
-    ];
-    
-    let usernameInput = null;
-    let passwordInput = null;
-    
-    // Find username field
-    for (const selector of usernameSelectors) {
-      usernameInput = document.querySelector(selector);
-      if (usernameInput && usernameInput.offsetParent !== null) break;
-    }
-    
-    // Find password field
-    for (const selector of passwordSelectors) {
-      passwordInput = document.querySelector(selector);
-      if (passwordInput && passwordInput.offsetParent !== null) break;
-    }
+    const usernameInput = findUsernameField(creds.usernameField);
+    const passwordInput = findPasswordField(creds.passwordField);
     
     if (usernameInput && passwordInput) {
-      // Fill the fields using native value setter for React compatibility
-      setNativeValue(usernameInput, creds.username);
-      setNativeValue(passwordInput, creds.password);
+      console.log('[DSG Extension] Found login fields, filling...');
       
-      // Visual feedback - brief green highlight
-      usernameInput.style.transition = 'background-color 0.3s';
-      passwordInput.style.transition = 'background-color 0.3s';
-      usernameInput.style.backgroundColor = '#dcfce7';
-      passwordInput.style.backgroundColor = '#dcfce7';
+      // Fill username
+      fillField(usernameInput, creds.username);
       
+      // Small delay before filling password
       setTimeout(() => {
-        usernameInput.style.backgroundColor = '';
-        passwordInput.style.backgroundColor = '';
-      }, 1000);
-      
-      // Clear pending login
-      chrome.runtime.sendMessage({ action: 'CLEAR_PENDING_LOGIN' });
-      
-      console.log('DSG Transport: Credentials auto-filled successfully!');
-      
-      // Show notification
-      showNotification('✅ Credentials filled by DSG Transport');
+        fillField(passwordInput, creds.password);
+        
+        // Show success notification
+        showNotification('✅ Credentials filled by DSG Transport', 'success');
+        
+        // Clear pending login
+        chrome.runtime.sendMessage({ action: 'CLEAR_PENDING_LOGIN' });
+        
+        // Report success
+        chrome.runtime.sendMessage({ 
+          action: 'LOGIN_SUCCESS', 
+          toolName: creds.toolName 
+        });
+        
+        console.log('[DSG Extension] Credentials filled successfully!');
+        
+      }, 200);
       
     } else {
-      console.log('DSG Transport: Could not find login fields');
-      // Retry after a delay (page might still be loading)
-      setTimeout(() => {
-        retryFillCredentials(creds, 0);
-      }, 2000);
+      console.log('[DSG Extension] Could not find login fields, retrying...');
+      // Retry a few times with increasing delays
+      retryFillCredentials(creds, 1);
     }
   }
   
   function retryFillCredentials(creds, attempt) {
-    if (attempt >= 3) {
-      console.log('DSG Transport: Max retries reached');
+    const maxAttempts = 5;
+    const delay = attempt * 1500; // Increasing delay
+    
+    if (attempt > maxAttempts) {
+      console.log('[DSG Extension] Max retries reached, showing manual login notice');
+      showNotification('⚠️ Could not auto-fill. Please login manually.', 'warning');
+      chrome.runtime.sendMessage({ 
+        action: 'LOGIN_FAILED', 
+        reason: 'Could not find login fields',
+        toolName: creds.toolName 
+      });
       return;
     }
     
-    const usernameInput = document.querySelector('input[type="email"], input[name*="user" i], input[name*="email" i]');
-    const passwordInput = document.querySelector('input[type="password"]');
-    
-    if (usernameInput && passwordInput) {
-      setNativeValue(usernameInput, creds.username);
-      setNativeValue(passwordInput, creds.password);
-      chrome.runtime.sendMessage({ action: 'CLEAR_PENDING_LOGIN' });
-      showNotification('✅ Credentials filled by DSG Transport');
-    } else {
-      setTimeout(() => retryFillCredentials(creds, attempt + 1), 2000);
-    }
+    setTimeout(() => {
+      const usernameInput = findUsernameField(creds.usernameField);
+      const passwordInput = findPasswordField(creds.passwordField);
+      
+      if (usernameInput && passwordInput) {
+        fillField(usernameInput, creds.username);
+        setTimeout(() => {
+          fillField(passwordInput, creds.password);
+          showNotification('✅ Credentials filled by DSG Transport', 'success');
+          chrome.runtime.sendMessage({ action: 'CLEAR_PENDING_LOGIN' });
+          chrome.runtime.sendMessage({ action: 'LOGIN_SUCCESS', toolName: creds.toolName });
+        }, 200);
+      } else {
+        console.log(`[DSG Extension] Retry ${attempt}/${maxAttempts}...`);
+        retryFillCredentials(creds, attempt + 1);
+      }
+    }, delay);
   }
   
-  // Set value using native setter for React/Angular/Vue compatibility
-  function setNativeValue(element, value) {
-    const valueSetter = Object.getOwnPropertyDescriptor(element, 'value')?.set;
-    const prototype = Object.getPrototypeOf(element);
-    const prototypeValueSetter = Object.getOwnPropertyDescriptor(prototype, 'value')?.set;
+  function findUsernameField(preferredName) {
+    // Try specific field name first
+    const selectors = [
+      `input[name="${preferredName}"]`,
+      `input[id="${preferredName}"]`,
+      // Common username/email field patterns
+      'input[name*="user" i]',
+      'input[name*="email" i]',
+      'input[name*="login" i]',
+      'input[name*="account" i]',
+      'input[id*="user" i]',
+      'input[id*="email" i]',
+      'input[id*="login" i]',
+      'input[type="email"]',
+      'input[autocomplete="username"]',
+      'input[autocomplete="email"]',
+      'input[placeholder*="email" i]',
+      'input[placeholder*="user" i]',
+      'input[placeholder*="login" i]',
+      // ASP.NET specific
+      'input[name*="txtUser" i]',
+      'input[id*="txtUser" i]',
+      'input[name*="UserName" i]',
+      'input[name*="LOGIN_ID" i]',
+      'input[name="Email"]',
+      // Generic text input in login forms
+      'form input[type="text"]:first-of-type'
+    ];
     
-    if (valueSetter && valueSetter !== prototypeValueSetter) {
-      prototypeValueSetter?.call(element, value);
-    } else {
-      valueSetter?.call(element, value);
+    for (const selector of selectors) {
+      try {
+        const input = document.querySelector(selector);
+        if (input && isVisible(input)) {
+          console.log('[DSG Extension] Found username field:', selector);
+          return input;
+        }
+      } catch (e) {}
     }
     
+    return null;
+  }
+  
+  function findPasswordField(preferredName) {
+    const selectors = [
+      `input[name="${preferredName}"]`,
+      `input[id="${preferredName}"]`,
+      'input[type="password"]',
+      'input[name*="pass" i]',
+      'input[name*="pwd" i]',
+      'input[id*="pass" i]',
+      'input[id*="pwd" i]',
+      'input[autocomplete="current-password"]',
+      'input[autocomplete="password"]',
+      // ASP.NET specific
+      'input[name*="txtPass" i]',
+      'input[id*="txtPass" i]',
+      'input[name*="Password" i]',
+      'input[name="PASSWORD"]'
+    ];
+    
+    for (const selector of selectors) {
+      try {
+        const input = document.querySelector(selector);
+        if (input && isVisible(input)) {
+          console.log('[DSG Extension] Found password field:', selector);
+          return input;
+        }
+      } catch (e) {}
+    }
+    
+    return null;
+  }
+  
+  function isVisible(element) {
+    if (!element) return false;
+    
+    const style = window.getComputedStyle(element);
+    return style.display !== 'none' && 
+           style.visibility !== 'hidden' && 
+           style.opacity !== '0' &&
+           element.offsetParent !== null;
+  }
+  
+  function fillField(element, value) {
+    if (!element || !value) return;
+    
+    // Focus the element
+    element.focus();
+    
+    // Clear existing value
+    element.value = '';
+    
+    // Use native value setter for React/Angular/Vue compatibility
+    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype, 'value'
+    ).set;
+    
+    nativeInputValueSetter.call(element, value);
+    
+    // Also set directly
     element.value = value;
     
-    // Dispatch all possible events
-    element.dispatchEvent(new Event('input', { bubbles: true }));
-    element.dispatchEvent(new Event('change', { bubbles: true }));
-    element.dispatchEvent(new Event('blur', { bubbles: true }));
-    element.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true }));
-    element.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
-    element.dispatchEvent(new KeyboardEvent('keypress', { bubbles: true }));
+    // Dispatch all necessary events
+    const events = ['input', 'change', 'blur', 'keydown', 'keyup', 'keypress'];
+    events.forEach(eventType => {
+      let event;
+      if (eventType.startsWith('key')) {
+        event = new KeyboardEvent(eventType, { bubbles: true, cancelable: true });
+      } else {
+        event = new Event(eventType, { bubbles: true, cancelable: true });
+      }
+      element.dispatchEvent(event);
+    });
+    
+    // Visual feedback - brief green highlight
+    const originalBg = element.style.backgroundColor;
+    const originalTransition = element.style.transition;
+    
+    element.style.transition = 'background-color 0.3s ease';
+    element.style.backgroundColor = '#dcfce7'; // Light green
+    
+    setTimeout(() => {
+      element.style.backgroundColor = originalBg || '';
+      element.style.transition = originalTransition || '';
+    }, 1000);
   }
   
-  function showNotification(message) {
+  function showNotification(message, type = 'info') {
+    // Remove any existing notification
+    const existing = document.getElementById('dsg-notification');
+    if (existing) existing.remove();
+    
     const notification = document.createElement('div');
+    notification.id = 'dsg-notification';
     notification.textContent = message;
+    
+    const bgColor = type === 'success' 
+      ? 'linear-gradient(135deg, #059669, #10b981)' 
+      : type === 'warning'
+        ? 'linear-gradient(135deg, #d97706, #f59e0b)'
+        : 'linear-gradient(135deg, #1e3a5f, #0f172a)';
+    
     notification.style.cssText = `
       position: fixed;
       top: 20px;
       right: 20px;
-      background: linear-gradient(135deg, #1e3a5f, #0f172a);
+      background: ${bgColor};
       color: white;
       padding: 16px 24px;
       border-radius: 12px;
-      font-family: system-ui, sans-serif;
+      font-family: system-ui, -apple-system, sans-serif;
       font-size: 14px;
-      z-index: 999999;
+      font-weight: 500;
+      z-index: 2147483647;
       box-shadow: 0 10px 40px rgba(0,0,0,0.3);
-      animation: slideIn 0.3s ease;
+      animation: dsgSlideIn 0.3s ease;
     `;
     
-    const style = document.createElement('style');
-    style.textContent = `
-      @keyframes slideIn {
-        from { transform: translateX(100%); opacity: 0; }
-        to { transform: translateX(0); opacity: 1; }
-      }
-    `;
-    document.head.appendChild(style);
+    // Add animation keyframes if not exists
+    if (!document.getElementById('dsg-styles')) {
+      const style = document.createElement('style');
+      style.id = 'dsg-styles';
+      style.textContent = `
+        @keyframes dsgSlideIn {
+          from { transform: translateX(100%); opacity: 0; }
+          to { transform: translateX(0); opacity: 1; }
+        }
+        @keyframes dsgSlideOut {
+          from { transform: translateX(0); opacity: 1; }
+          to { transform: translateX(100%); opacity: 0; }
+        }
+      `;
+      document.head.appendChild(style);
+    }
+    
     document.body.appendChild(notification);
     
+    // Remove after 3 seconds
     setTimeout(() => {
-      notification.style.animation = 'slideIn 0.3s ease reverse';
+      notification.style.animation = 'dsgSlideOut 0.3s ease forwards';
       setTimeout(() => notification.remove(), 300);
     }, 3000);
   }
+  
+  // Also listen for page navigation (SPA)
+  let lastUrl = window.location.href;
+  const observer = new MutationObserver(() => {
+    if (window.location.href !== lastUrl) {
+      lastUrl = window.location.href;
+      console.log('[DSG Extension] URL changed, rechecking...');
+      setTimeout(checkAndFillCredentials, 1000);
+    }
+  });
+  
+  observer.observe(document.body, { childList: true, subtree: true });
+  
 })();
