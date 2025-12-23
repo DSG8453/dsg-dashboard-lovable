@@ -27,7 +27,7 @@ class ToolCreateWithCredentials(BaseModel):
 
 @router.get("", response_model=List[dict])
 async def get_tools(current_user: dict = Depends(get_current_user)):
-    """Get all tools - credentials only visible to Super Admin"""
+    """Get all tools - credentials ONLY visible to Super Admin"""
     db = await get_db()
     
     is_super_admin = current_user.get("role") == "Super Administrator"
@@ -41,20 +41,12 @@ async def get_tools(current_user: dict = Depends(get_current_user)):
             "description": tool["description"],
             "icon": tool.get("icon", "Globe"),
             "url": tool.get("url", "#"),
-            "has_credentials": bool(tool.get("credentials"))
+            "has_credentials": bool(tool.get("credentials") and tool.get("credentials", {}).get("username"))
         }
         
-        # For Admin/Users - include login_url so they can access tools directly
-        # But DON'T include username/password - they just need the URL
-        if tool.get("credentials"):
-            credentials = tool.get("credentials", {})
-            # Everyone gets login_url for direct access
-            if credentials.get("login_url"):
-                tool_data["credentials"] = {"login_url": credentials.get("login_url")}
-            
-            # Only Super Admin can see full credentials (username, password, notes)
-            if is_super_admin:
-                tool_data["credentials"] = credentials
+        # ONLY Super Admin can see credentials - Admin/Users see NOTHING
+        if is_super_admin and tool.get("credentials"):
+            tool_data["credentials"] = tool.get("credentials", {})
         
         tools.append(tool_data)
     
