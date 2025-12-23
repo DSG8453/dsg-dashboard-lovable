@@ -95,6 +95,8 @@ export const ToolCard = ({ tool, onDelete, onUpdate }) => {
       username: "",
       password: "",
       login_url: "",
+      username_field: "username",
+      password_field: "password",
       notes: ""
     }
   });
