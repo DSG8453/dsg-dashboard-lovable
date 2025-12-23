@@ -441,10 +441,40 @@ export const ToolCard = ({ tool, onDelete, onUpdate }) => {
                   </Label>
                   <Input
                     value={editForm.credentials.login_url}
-                    onChange={(e) => setEditForm({
-                      ...editForm, 
-                      credentials: {...editForm.credentials, login_url: e.target.value}
-                    })}
+                    onChange={(e) => {
+                      const url = e.target.value;
+                      // Auto-detect form field names based on URL
+                      let username_field = editForm.credentials.username_field || "username";
+                      let password_field = editForm.credentials.password_field || "password";
+                      
+                      // Known site mappings for auto-fill
+                      if (url.includes('rmissecure.com')) {
+                        username_field = "ctl00$ContentPlaceHolderMain$txtUserName";
+                        password_field = "ctl00$ContentPlaceHolderMain$txtPassword";
+                      } else if (url.includes('zoho.com')) {
+                        username_field = "LOGIN_ID";
+                        password_field = "PASSWORD";
+                      } else if (url.includes('microsoft.com') || url.includes('office.com')) {
+                        username_field = "loginfmt";
+                        password_field = "passwd";
+                      } else if (url.includes('google.com')) {
+                        username_field = "identifier";
+                        password_field = "password";
+                      } else if (url.includes('dat.com') || url.includes('truckstop.com')) {
+                        username_field = "email";
+                        password_field = "password";
+                      }
+                      
+                      setEditForm({
+                        ...editForm, 
+                        credentials: {
+                          ...editForm.credentials, 
+                          login_url: url,
+                          username_field: username_field,
+                          password_field: password_field
+                        }
+                      });
+                    }}
                     placeholder="https://login.example.com"
                   />
                 </div>
@@ -493,10 +523,11 @@ export const ToolCard = ({ tool, onDelete, onUpdate }) => {
                   </div>
                 </div>
 
-                {/* Advanced Form Field Configuration */}
+                {/* Advanced Form Field Configuration - Auto-filled based on URL */}
                 <div className="p-3 rounded-lg bg-muted/50 border">
-                  <p className="text-xs font-medium text-muted-foreground mb-2">
-                    Form Field Names (for auto-login)
+                  <p className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-2">
+                    Form Field Names (auto-detected)
+                    <span className="text-green-500 text-[10px]">✓ Auto-filled</span>
                   </p>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1">
@@ -525,7 +556,7 @@ export const ToolCard = ({ tool, onDelete, onUpdate }) => {
                     </div>
                   </div>
                   <p className="text-xs text-muted-foreground mt-2">
-                    These are the HTML form input names used on the login page (e.g., email, Email, LOGIN_ID)
+                    Auto-detected from URL. Edit only if auto-login doesn't work.
                   </p>
                 </div>
 
