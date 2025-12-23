@@ -326,7 +326,7 @@ async def update_tool_access(
     tool_ids: List[str],
     current_user: dict = Depends(require_admin)
 ):
-    """Update user's tool access (admin only)"""
+    """Update user's tool access (admin only - limited to admin's own tools)"""
     db = await get_db()
     
     try:
@@ -345,10 +345,20 @@ async def update_tool_access(
     if current_user["role"] == "Administrator":
         admin_data = await db.users.find_one({"_id": ObjectId(current_user["id"])})
         assigned_users = admin_data.get("assigned_users", []) if admin_data else []
+        admin_tools = admin_data.get("allowed_tools", []) if admin_data else []
+        
         if user_id not in assigned_users:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You can only assign tools to users assigned to you"
+            )
+        
+        # Admin can only assign tools that are assigned to them
+        invalid_tools = [t for t in tool_ids if t not in admin_tools]
+        if invalid_tools:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only assign tools that are assigned to you"
             )
     
     # Get previous tools for comparison
