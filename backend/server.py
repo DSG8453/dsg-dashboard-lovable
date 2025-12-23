@@ -99,7 +99,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
         print(f"[WS] Error: {e}")
         try:
             await websocket.close(code=4000)
-        except:
+        except Exception:
             pass
 
 if __name__ == "__main__":
