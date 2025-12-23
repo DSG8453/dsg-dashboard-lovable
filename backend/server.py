@@ -61,6 +61,47 @@ app.include_router(ip_management_router, prefix="/api/ip-management", tags=["IP 
 async def health_check():
     return {"status": "healthy", "service": "DSG Transport API"}
 
+
+# WebSocket endpoint for real-time updates
+@app.websocket("/ws/{token}")
+async def websocket_endpoint(websocket: WebSocket, token: str):
+    """WebSocket endpoint for real-time dashboard updates"""
+    try:
+        # Verify JWT token
+        secret_key = os.getenv("JWT_SECRET_KEY", "your-secret-key")
+        payload = jwt.decode(token, secret_key, algorithms=["HS256"])
+        user_email = payload.get("sub")
+        
+        if not user_email:
+            await websocket.close(code=4001)
+            return
+        
+        # Connect user
+        await manager.connect(websocket, user_email)
+        
+        try:
+            while True:
+                # Keep connection alive, listen for messages
+                data = await websocket.receive_text()
+                
+                # Handle ping/pong for connection health
+                if data == "ping":
+                    await websocket.send_text("pong")
+                    
+        except WebSocketDisconnect:
+            manager.disconnect(websocket)
+            
+    except jwt.ExpiredSignatureError:
+        await websocket.close(code=4002)
+    except jwt.InvalidTokenError:
+        await websocket.close(code=4003)
+    except Exception as e:
+        print(f"[WS] Error: {e}")
+        try:
+            await websocket.close(code=4000)
+        except:
+            pass
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8001)
