@@ -3,7 +3,7 @@ Secure Tool Access Service - Zero Visibility Credentials
 Credentials are NEVER shown to users - login happens automatically in background
 """
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from database import get_db
 from routes.auth import get_current_user
 from bson import ObjectId
@@ -13,11 +13,16 @@ import hashlib
 import base64
 import os
 import json
+import httpx
+import re
 
 router = APIRouter()
 
 # Store one-time access tokens
 access_tokens = {}
+
+# Store session cookies for tools
+tool_sessions = {}
 
 
 @router.post("/{tool_id}/request-access")
