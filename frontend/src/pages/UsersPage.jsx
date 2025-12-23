@@ -594,14 +594,14 @@ export const UsersPage = () => {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
         <Card className="border-2 border-border/50">
           <CardContent className="p-4">
-            <p className="text-2xl font-bold text-foreground">{users.filter(u => u.role === "User").length}</p>
+            <p className="text-2xl font-bold text-foreground">{users.length}</p>
             <p className="text-sm text-muted-foreground">{isSuperAdmin ? "Total Users" : "My Users"}</p>
           </CardContent>
         </Card>
         <Card className="border-2 border-border/50">
           <CardContent className="p-4">
             <p className="text-2xl font-bold text-success">
-              {users.filter((u) => u.status === "Active" && u.role === "User").length}
+              {users.filter((u) => u.status === "Active").length}
             </p>
             <p className="text-sm text-muted-foreground">Active</p>
           </CardContent>
