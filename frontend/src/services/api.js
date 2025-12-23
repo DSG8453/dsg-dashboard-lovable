@@ -151,6 +151,10 @@ export const toolsAPI = {
   
   delete: (id) => 
     fetchAPI(`/api/tools/${id}`, { method: 'DELETE' }),
+  
+  // Secure access - request one-time access token
+  requestSecureAccess: (toolId) =>
+    fetchAPI(`/api/secure-access/${toolId}/request-access`, { method: 'POST' }),
 };
 
 // Credentials API
