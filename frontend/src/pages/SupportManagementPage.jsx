@@ -71,7 +71,7 @@ export const SupportManagementPage = () => {
   const [resolutionNote, setResolutionNote] = useState("");
   const [adminNotes, setAdminNotes] = useState("");
 
-  const isAdmin = user?.role === "Administrator";
+  const isSuperAdmin = user?.role === "Super Administrator";
 
   const handleSaveSettings = () => {
     updateSettings(editSettings);
@@ -126,15 +126,19 @@ export const SupportManagementPage = () => {
   const openIssues = issues.filter((i) => i.status !== "resolved");
   const resolvedIssues = issues.filter((i) => i.status === "resolved");
 
-  if (!isAdmin) {
+  // Only Super Admin can access this page
+  if (!isSuperAdmin) {
     return (
       <div className="animate-fade-in">
         <Card className="border-2 border-border/50">
           <CardContent className="p-12 text-center">
             <AlertTriangle className="h-12 w-12 text-warning mx-auto mb-4" />
-            <h2 className="text-xl font-bold mb-2">Admin Access Required</h2>
+            <h2 className="text-xl font-bold mb-2">Super Admin Access Required</h2>
             <p className="text-muted-foreground">
-              Only administrators can access the support management panel.
+              Only Super Administrator can access the support management panel.
+            </p>
+            <p className="text-sm text-muted-foreground mt-2">
+              You can view and track your reported issues from the "My Issues" page.
             </p>
           </CardContent>
         </Card>
