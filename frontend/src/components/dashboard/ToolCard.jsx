@@ -160,6 +160,8 @@ export const ToolCard = ({ tool, onDelete, onUpdate }) => {
         username: tool.credentials?.username || "",
         password: tool.credentials?.password || "",
         login_url: tool.credentials?.login_url || "",
+        username_field: tool.credentials?.username_field || "username",
+        password_field: tool.credentials?.password_field || "password",
         notes: tool.credentials?.notes || ""
       }
     });
