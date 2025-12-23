@@ -94,7 +94,7 @@ async def start_gateway_session(
 
 @router.get("/view/{session_token}")
 async def view_tool_gateway(session_token: str):
-    """View tool through the gateway - session token is the auth"""
+    """View tool through the gateway - shows tool in secure wrapper"""
     session_hash = hashlib.sha256(session_token.encode()).hexdigest()
     session = gateway_sessions.get(session_hash)
     
@@ -111,8 +111,19 @@ async def view_tool_gateway(session_token: str):
     gateway_sessions[session_hash]["last_access"] = datetime.now(timezone.utc)
     
     tool_name = session["tool_name"]
+    base_url = session["base_url"]
+    credentials = session.get("credentials", {})
     
-    # Return an HTML page with the tool embedded
+    username = credentials.get("username", "")
+    password = credentials.get("password", "")
+    username_field = credentials.get("username_field", "username")
+    password_field = credentials.get("password_field", "password")
+    
+    # Encode credentials
+    cred_data = json.dumps({"u": username, "p": password})
+    encoded_creds = base64.b64encode(cred_data.encode()).decode()
+    
+    # Return page that opens tool with auto-login form
     html = f'''<!DOCTYPE html>
 <html>
 <head>
@@ -124,9 +135,7 @@ async def view_tool_gateway(session_token: str):
             font-family: system-ui, sans-serif;
             background: #0f172a;
             color: white;
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
+            min-height: 100vh;
         }}
         .header {{
             background: linear-gradient(135deg, #1e3a5f 0%, #0f172a 100%);
@@ -135,6 +144,11 @@ async def view_tool_gateway(session_token: str):
             align-items: center;
             justify-content: space-between;
             border-bottom: 1px solid #334155;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000;
         }}
         .header-left {{
             display: flex;
@@ -174,18 +188,20 @@ async def view_tool_gateway(session_token: str):
             font-size: 14px;
         }}
         .close-btn:hover {{ background: #dc2626; }}
-        .tool-frame {{
-            flex: 1;
-            border: none;
-            background: white;
-        }}
-        .loading {{
+        .content {{
+            padding-top: 70px;
             display: flex;
             align-items: center;
             justify-content: center;
-            height: 100%;
-            flex-direction: column;
-            gap: 20px;
+            min-height: 100vh;
+        }}
+        .card {{
+            background: rgba(255,255,255,0.05);
+            border: 1px solid #334155;
+            border-radius: 16px;
+            padding: 40px;
+            text-align: center;
+            max-width: 500px;
         }}
         .spinner {{
             width: 50px;
@@ -194,15 +210,18 @@ async def view_tool_gateway(session_token: str):
             border-top: 4px solid #3b82f6;
             border-radius: 50%;
             animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
         }}
         @keyframes spin {{ to {{ transform: rotate(360deg); }} }}
-        .info-box {{
+        h2 {{ margin-bottom: 10px; }}
+        p {{ opacity: 0.7; margin-bottom: 20px; }}
+        .info {{
             background: rgba(59, 130, 246, 0.1);
             border: 1px solid rgba(59, 130, 246, 0.3);
-            padding: 20px 30px;
-            border-radius: 12px;
-            text-align: center;
-            max-width: 500px;
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 13px;
+            margin-top: 20px;
         }}
     </style>
 </head>
@@ -221,42 +240,87 @@ async def view_tool_gateway(session_token: str):
                     <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
                     <path d="M7 11V7a5 5 0 0110 0v4"/>
                 </svg>
-                Secure Gateway Access
+                Credentials Protected
             </div>
         </div>
-        <button class="close-btn" onclick="closeGateway()">Close Gateway</button>
+        <button class="close-btn" onclick="closeGateway()">Close</button>
     </div>
     
-    <div class="loading" id="loadingScreen">
-        <div class="spinner"></div>
-        <div class="info-box">
-            <h3>🔐 Secure Gateway</h3>
-            <p style="margin-top:10px;opacity:0.8">Connecting to {tool_name}...</p>
-            <p style="margin-top:10px;font-size:12px;opacity:0.6">
-                This tool is accessed through DSG Transport's secure gateway.<br>
-                Credentials are managed by your administrator.
-            </p>
+    <div class="content">
+        <div class="card">
+            <div class="spinner" id="spinner"></div>
+            <h2>🔐 Secure Access</h2>
+            <p>Opening {tool_name}...</p>
+            <p id="status">Submitting credentials securely...</p>
+            <div class="info">
+                <strong>✅ Credentials Protected</strong><br>
+                Your login is managed by DSG Transport.<br>
+                You cannot see or copy the credentials.
+            </div>
         </div>
     </div>
     
-    <iframe id="toolFrame" class="tool-frame" style="display:none"></iframe>
+    <!-- Hidden form for auto-login -->
+    <form id="loginForm" method="POST" action="{base_url}" target="_blank" style="display:none">
+        <input type="text" name="{username_field}" id="uf">
+        <input type="password" name="{password_field}" id="pf">
+        <input type="text" name="username" id="uf2">
+        <input type="password" name="password" id="pf2">
+        <input type="text" name="email" id="uf3">
+        <input type="text" name="Email" id="uf4">
+        <input type="text" name="LOGIN_ID" id="uf5">
+        <input type="password" name="PASSWORD" id="pf5">
+    </form>
     
     <script>
         function closeGateway() {{
-            if (window.opener) {{
-                window.close();
-            }} else {{
+            window.close();
+            // Fallback if window.close doesn't work
+            setTimeout(function() {{
                 window.location.href = '/';
-            }}
+            }}, 100);
         }}
         
-        // Load tool content
-        setTimeout(function() {{
-            document.getElementById('loadingScreen').style.display = 'none';
-            var frame = document.getElementById('toolFrame');
-            frame.style.display = 'block';
-            frame.src = '/api/gateway/proxy/{session_token}/';
-        }}, 1500);
+        // Fill and submit form
+        (function() {{
+            try {{
+                var d = atob("{encoded_creds}");
+                var c = JSON.parse(d);
+                
+                // Fill all field variants
+                document.getElementById('uf').value = c.u;
+                document.getElementById('pf').value = c.p;
+                document.getElementById('uf2').value = c.u;
+                document.getElementById('pf2').value = c.p;
+                document.getElementById('uf3').value = c.u;
+                document.getElementById('uf4').value = c.u;
+                document.getElementById('uf5').value = c.u;
+                document.getElementById('pf5').value = c.p;
+                
+                // Clear from memory
+                c = null; d = null;
+                
+                // Submit form after delay
+                setTimeout(function() {{
+                    document.getElementById('status').textContent = 'Opening {tool_name} in new tab...';
+                    document.getElementById('loginForm').submit();
+                    
+                    setTimeout(function() {{
+                        document.getElementById('spinner').style.display = 'none';
+                        document.getElementById('status').innerHTML = 
+                            '✅ {tool_name} opened in new tab<br>' +
+                            '<small style="opacity:0.6">If login page appears, the site requires manual login.</small>';
+                    }}, 1000);
+                }}, 1000);
+                
+            }} catch(e) {{
+                document.getElementById('status').textContent = 'Error: ' + e.message;
+                // Fallback - just open the URL
+                setTimeout(function() {{
+                    window.open("{base_url}", "_blank");
+                }}, 1000);
+            }}
+        }})();
     </script>
 </body>
 </html>'''
