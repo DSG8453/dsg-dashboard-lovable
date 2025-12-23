@@ -42,9 +42,11 @@ async def log_activity(
 async def get_activity_logs(
     limit: int = Query(50, le=200),
     activity_type: Optional[str] = Query(None),
+    user_role: Optional[str] = Query(None),  # Filter by user role
+    user_email: Optional[str] = Query(None),  # Filter by specific user
     current_user: dict = Depends(require_super_admin)
 ):
-    """Get activity logs (Super Admin only)"""
+    """Get activity logs (Super Admin only) - Can filter by activity type, user role, or specific user"""
     db = await get_db()
     
     # Build filter
@@ -52,18 +54,36 @@ async def get_activity_logs(
     if activity_type and activity_type != "all":
         query_filter["activity_type"] = activity_type
     
+    # Filter by user role - need to join with users collection
+    if user_role and user_role != "all":
+        # Get all users with this role
+        users_with_role = await db.users.find({"role": user_role}, {"email": 1}).to_list(1000)
+        role_emails = [u["email"] for u in users_with_role]
+        query_filter["user_email"] = {"$in": role_emails}
+    
+    # Filter by specific user
+    if user_email:
+        query_filter["user_email"] = user_email
+    
     logs = []
     cursor = db.activity_logs.find(query_filter).sort("created_at", -1).limit(limit)
+    
+    # Get user roles for display
+    all_users = {}
+    async for u in db.users.find({}, {"email": 1, "role": 1}):
+        all_users[u["email"]] = u.get("role", "Unknown")
     
     async for log in cursor:
         # Format time ago
         created_at = log.get("created_at", "")
         time_ago = format_time_ago(created_at) if created_at else "Unknown"
+        user_email_val = log.get("user_email", "Unknown")
         
         logs.append({
             "id": str(log["_id"]),
-            "user": log.get("user_email", "Unknown"),
+            "user": user_email_val,
             "user_name": log.get("user_name", "Unknown"),
+            "user_role": all_users.get(user_email_val, "Unknown"),
             "action": log.get("action", ""),
             "tool": log.get("target", "System"),
             "details": log.get("details"),
