@@ -74,9 +74,13 @@ async def create_tool(tool_data: ToolCreateWithCredentials, current_user: dict =
     }
     
     result = await db.tools.insert_one(new_tool)
+    tool_id = str(result.inserted_id)
+    
+    # Notify all connected users about the new tool
+    await notify_tool_created(tool_data.name, tool_id)
     
     return {
-        "id": str(result.inserted_id),
+        "id": tool_id,
         "name": tool_data.name,
         "category": tool_data.category,
         "description": tool_data.description,
