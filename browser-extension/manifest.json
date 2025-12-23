@@ -15,8 +15,7 @@
     "matches": [
       "*://*.emergentagent.com/*",
       "*://*.dsgtransport.com/*",
-      "*://localhost:3000/*",
-      "*://localhost/*",
+      "http://localhost/*",
       "https://*.preview.emergentagent.com/*"
     ]
   },
