@@ -523,7 +523,7 @@ export const ToolCard = ({ tool, onDelete, onUpdate }) => {
                     </div>
                   </div>
                   <p className="text-xs text-muted-foreground mt-2">
-                    These are the HTML form input names used on the login page (e.g., "email", "Email", "LOGIN_ID")
+                    These are the HTML form input names used on the login page (e.g., email, Email, LOGIN_ID)
                   </p>
                 </div>
 
