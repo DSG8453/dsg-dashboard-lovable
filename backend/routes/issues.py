@@ -247,8 +247,15 @@ async def analyze_issue(issue_id: str, current_user: dict = Depends(require_admi
 
 @router.post("/{issue_id}/resolve")
 async def resolve_issue(issue_id: str, resolution_note: str, current_user: dict = Depends(require_admin)):
-    """Resolve issue and notify user (admin only)"""
+    """Resolve issue and notify user (Super Admin only)"""
     db = await get_db()
+    
+    # Only Super Admin can resolve issues
+    if current_user["role"] != "Super Administrator":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only Super Administrator can resolve issues"
+        )
     
     issue = await db.issues.find_one({"_id": ObjectId(issue_id)})
     if not issue:
