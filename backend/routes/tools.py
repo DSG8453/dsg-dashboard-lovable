@@ -13,6 +13,8 @@ class ToolCredentials(BaseModel):
     username: Optional[str] = None
     password: Optional[str] = None
     login_url: Optional[str] = None
+    username_field: Optional[str] = "username"
+    password_field: Optional[str] = "password"
     notes: Optional[str] = None
 
 class ToolCreateWithCredentials(BaseModel):
