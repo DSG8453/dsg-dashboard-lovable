@@ -7,10 +7,11 @@ A full-stack management portal for DSG Transport LLC with:
 - JWT authentication with 2-Step Verification (2SV)
 - Encrypted credential storage
 - Complex role-based access control (Super Admin > Admin > User)
+- **Browser Extension for Secure Auto-Login** (NEW)
 
 ## Test Credentials
-- **Super Admin:** info@dsgtransport.net / admin123 (requires 2SV OTP via email)
-- **Admin:** testadmin@dsgtransport.com / admin123 (no 2SV)
+- **Super Admin:** info@dsgtransport.net / admin123 (2SV currently disabled for testing)
+- **Admin:** admin@dsgtransport.com / admin123 (no 2SV)
 - **User:** testuser@dsgtransport.com / user123
 
 ## Backend API Base URL
@@ -18,7 +19,19 @@ Use REACT_APP_BACKEND_URL from /app/frontend/.env with /api prefix
 
 ## Features to Test
 
-### 1. Activity Log - Super Admin Only (NEW - PRIORITY)
+### PRIORITY: Browser Extension Secure Auto-Login (NEW)
+- [x] Backend: POST /api/secure-access/{tool_id}/extension-payload returns credentials payload
+- [x] Frontend: "Open Tool" button shows extension installation dialog when extension not detected
+- [x] Frontend: Extension installation dialog shows clear step-by-step instructions
+- [x] Frontend: "Skip for now" option opens tool URL for manual login
+- [ ] Extension: Install unpacked extension in Chrome
+- [ ] Extension: Copy Extension ID from chrome://extensions/
+- [ ] Extension: Enter Extension ID in dashboard dialog
+- [ ] Extension: Click "Open Tool" - should open login page in new tab
+- [ ] Extension: Credentials auto-fill on RMIS login page
+- [ ] Extension: Green notification shows "Credentials filled by DSG Transport"
+
+### 1. Activity Log - Super Admin Only
 - [x] Backend: GET /api/activity-logs returns 403 for Admin (verified via curl)
 - [x] Frontend: Activity Logs tab hidden from Admin navbar (verified via screenshot)
 - [x] Frontend: Admin redirected to Dashboard when accessing /activity-logs directly
