@@ -94,6 +94,7 @@ async def launch_tool(access_token: str):
     """
     Launch tool with secure auto-login.
     Uses hidden form POST submission for auto-login.
+    Credentials are encoded and injected via JavaScript to prevent easy viewing.
     """
     token_hash = hashlib.sha256(access_token.encode()).hexdigest()
     token_data = access_tokens.get(token_hash)
@@ -126,8 +127,11 @@ async def launch_tool(access_token: str):
     username_field = credentials.get("username_field", "username")
     password_field = credentials.get("password_field", "password")
     
+    # Encode credentials (double base64 for obfuscation)
+    enc_user = base64.b64encode(base64.b64encode(username.encode()).decode().encode()).decode()
+    enc_pass = base64.b64encode(base64.b64encode(password.encode()).decode().encode()).decode()
+    
     # Generate secure auto-login page
-    # This page will open the login URL in a new tab and attempt to fill credentials
     html_content = f'''<!DOCTYPE html>
 <html>
 <head>
@@ -193,7 +197,7 @@ async def launch_tool(access_token: str):
             box-shadow:0 4px 15px rgba(59,130,246,0.3);
         }}
         .btn:hover{{transform:translateY(-2px);box-shadow:0 6px 20px rgba(59,130,246,0.4)}}
-        .hidden{{position:absolute;left:-9999px;opacity:0}}
+        .hidden{{position:absolute;left:-9999px;opacity:0;pointer-events:none}}
     </style>
 </head>
 <body>
@@ -215,49 +219,69 @@ async def launch_tool(access_token: str):
         <a class="btn" id="openBtn" style="display:none" href="{login_url}" target="_blank">Open {tool_name}</a>
     </div>
     
-    <!-- Hidden auto-submit form -->
+    <!-- Hidden auto-submit form - credentials injected via JS -->
     <div class="hidden">
         <form id="autoForm" method="POST" action="{login_url}" target="_blank">
-            <input type="text" name="{username_field}" value="{username}">
-            <input type="password" name="{password_field}" value="{password}">
+            <input type="text" name="{username_field}" id="uf1">
+            <input type="password" name="{password_field}" id="pf1">
         </form>
     </div>
 
     <script>
     (function(){{
-        var submitted = false;
+        // Decode and inject credentials
+        var d=function(s){{return atob(atob(s))}};
+        var _u,_p;
+        try{{
+            _u=d("{enc_user}");
+            _p=d("{enc_pass}");
+        }}catch(e){{
+            window.location.href="{login_url}";
+            return;
+        }}
         
-        function launch() {{
-            if (submitted) return;
-            submitted = true;
+        // Inject into form
+        document.getElementById('uf1').value=_u;
+        document.getElementById('pf1').value=_p;
+        
+        // Clear from memory
+        _u=null;_p=null;
+        
+        var submitted=false;
+        
+        function launch(){{
+            if(submitted)return;
+            submitted=true;
             
-            document.getElementById('statusText').textContent = 'Launching {tool_name}...';
+            document.getElementById('statusText').textContent='Launching {tool_name}...';
             
-            // Try form submission first (works for simple login forms)
-            try {{
+            try{{
                 document.getElementById('autoForm').submit();
                 
-                setTimeout(function() {{
-                    document.getElementById('spinner').style.display = 'none';
-                    document.getElementById('statusText').textContent = '{tool_name} opened in new tab';
-                    document.getElementById('status').innerHTML = '✅ Login page opened<br><small>If not logged in automatically, enter credentials manually</small>';
-                    document.getElementById('openBtn').style.display = 'inline-block';
-                }}, 1500);
+                setTimeout(function(){{
+                    document.getElementById('spinner').style.display='none';
+                    document.getElementById('statusText').textContent='{tool_name} opened in new tab';
+                    document.getElementById('status').innerHTML='✅ Login attempted<br><small>If not logged in, credentials may need verification</small>';
+                    document.getElementById('openBtn').style.display='inline-block';
+                }},1500);
                 
-            }} catch(e) {{
-                // Fallback to direct link
-                window.open('{login_url}', '_blank');
-                document.getElementById('spinner').style.display = 'none';
-                document.getElementById('statusText').textContent = '{tool_name} opened';
-                document.getElementById('openBtn').style.display = 'inline-block';
+            }}catch(e){{
+                window.open('{login_url}','_blank');
+                document.getElementById('spinner').style.display='none';
+                document.getElementById('statusText').textContent='{tool_name} opened';
+                document.getElementById('openBtn').style.display='inline-block';
             }}
         }}
         
-        // Launch after short delay
-        setTimeout(launch, 800);
+        setTimeout(launch,800);
         
-        // Security: prevent inspection
-        document.addEventListener('contextmenu', function(e) {{ e.preventDefault(); }});
+        // Security measures
+        document.addEventListener('contextmenu',function(e){{e.preventDefault()}});
+        document.addEventListener('keydown',function(e){{
+            if(e.key==='F12'||(e.ctrlKey&&e.shiftKey&&(e.key==='I'||e.key==='J'||e.key==='C'))){{
+                e.preventDefault();
+            }}
+        }});
     }})();
     </script>
 </body>
