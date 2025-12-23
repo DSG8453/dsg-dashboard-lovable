@@ -57,6 +57,7 @@ app.include_router(settings_router, prefix="/api/settings", tags=["Settings"])
 app.include_router(devices_router, prefix="/api/devices", tags=["Devices"])
 app.include_router(activity_logs_router, prefix="/api/activity-logs", tags=["Activity Logs"])
 app.include_router(ip_management_router, prefix="/api/ip-management", tags=["IP Management"])
+app.include_router(secure_access_router, prefix="/api/secure-access", tags=["Secure Access"])
 
 @app.get("/api/health")
 async def health_check():
