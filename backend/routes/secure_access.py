@@ -98,8 +98,8 @@ async def request_tool_access(
 @router.get("/launch/{access_token}")
 async def launch_tool(access_token: str):
     """
-    Launch tool with hidden auto-login.
-    Immediately submits form - no visible page.
+    Launch tool with server-side auto-login.
+    Performs login on backend, then redirects user with session.
     """
     token_hash = hashlib.sha256(access_token.encode()).hexdigest()
     token_data = access_tokens.get(token_hash)
@@ -132,13 +132,117 @@ async def launch_tool(access_token: str):
     username_field = credentials.get("username_field", "username")
     password_field = credentials.get("password_field", "password")
     
-    # Create a minimal page that immediately submits the form
-    # The form posts directly to the login URL with credentials
-    html_content = f'''<!DOCTYPE html>
+    try:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=30.0) as client:
+            # Step 1: Fetch the login page to get any hidden fields (ViewState, etc.)
+            login_page = await client.get(login_url)
+            
+            if login_page.status_code != 200:
+                # Can't fetch login page, just redirect
+                return RedirectResponse(url=login_url, status_code=302)
+            
+            html_content = login_page.text
+            
+            # Extract hidden fields (ASP.NET ViewState, EventValidation, etc.)
+            hidden_fields = {}
+            
+            # Find all hidden inputs
+            hidden_pattern = r'<input[^>]*type=["\']hidden["\'][^>]*>'
+            hidden_inputs = re.findall(hidden_pattern, html_content, re.IGNORECASE)
+            
+            for inp in hidden_inputs:
+                name_match = re.search(r'name=["\']([^"\']+)["\']', inp)
+                value_match = re.search(r'value=["\']([^"\']*)["\']', inp)
+                if name_match:
+                    name = name_match.group(1)
+                    value = value_match.group(1) if value_match else ""
+                    hidden_fields[name] = value
+            
+            # Build form data
+            form_data = hidden_fields.copy()
+            form_data[username_field] = username
+            form_data[password_field] = password
+            
+            # Also add common field names as backup
+            form_data["username"] = username
+            form_data["password"] = password
+            form_data["email"] = username
+            form_data["Email"] = username
+            
+            # Step 2: Submit the login form
+            headers = {
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Referer": login_url,
+                "Origin": login_url.rsplit("/", 1)[0] if "/" in login_url else login_url
+            }
+            
+            # Get cookies from the initial request
+            cookies = dict(login_page.cookies)
+            
+            login_response = await client.post(
+                login_url,
+                data=form_data,
+                headers=headers,
+                cookies=cookies
+            )
+            
+            # Check if login was successful
+            # Usually successful login redirects to a dashboard or different page
+            final_url = str(login_response.url)
+            
+            # Collect all cookies from the session
+            all_cookies = dict(login_response.cookies)
+            for cookie_name, cookie_value in login_page.cookies.items():
+                if cookie_name not in all_cookies:
+                    all_cookies[cookie_name] = cookie_value
+            
+            # If we got cookies, create a redirect page that sets them
+            if all_cookies:
+                # Create a page that redirects with session info
+                cookie_script = ""
+                for name, value in all_cookies.items():
+                    # Set cookies via JavaScript
+                    cookie_script += f'document.cookie="{name}={value};path=/;";'
+                
+                redirect_html = f'''<!DOCTYPE html>
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Redirecting...</title>
+<title>Logging in...</title>
+<style>
+body{{margin:0;padding:50px;font-family:sans-serif;background:#0f172a;color:#fff;text-align:center}}
+.l{{width:30px;height:30px;border:3px solid #333;border-top:3px solid #22c55e;border-radius:50%;animation:s 1s linear infinite;margin:20px auto}}
+@keyframes s{{to{{transform:rotate(360deg)}}}}
+</style>
+</head>
+<body>
+<div class="l"></div>
+<p>Logging into {tool_name}...</p>
+<script>
+// Redirect to the final URL
+setTimeout(function(){{
+    window.location.href="{final_url}";
+}}, 500);
+</script>
+</body>
+</html>'''
+                return HTMLResponse(content=redirect_html)
+            else:
+                # No cookies, just redirect to the result
+                return RedirectResponse(url=final_url, status_code=302)
+                
+    except Exception as e:
+        # If server-side login fails, fall back to simple form POST
+        print(f"Server-side login failed: {e}")
+        
+        # Encode credentials to hide them
+        cred_data = base64.b64encode(json.dumps({"u": username, "p": password}).encode()).decode()
+        
+        fallback_html = f'''<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Connecting...</title>
 <style>body{{margin:0;padding:50px;font-family:sans-serif;background:#0f172a;color:#fff;text-align:center}}
 .l{{width:30px;height:30px;border:3px solid #333;border-top:3px solid #3b82f6;border-radius:50%;animation:s 1s linear infinite;margin:20px auto}}
 @keyframes s{{to{{transform:rotate(360deg)}}}}</style>
@@ -147,21 +251,26 @@ async def launch_tool(access_token: str):
 <div class="l"></div>
 <p>Connecting to {tool_name}...</p>
 <form id="f" method="POST" action="{login_url}" style="display:none">
-<input type="hidden" name="{username_field}" value="{username}">
-<input type="hidden" name="{password_field}" value="{password}">
-<input type="hidden" name="username" value="{username}">
-<input type="hidden" name="password" value="{password}">
-<input type="hidden" name="email" value="{username}">
-<input type="hidden" name="Email" value="{username}">
-<input type="hidden" name="LOGIN_ID" value="{username}">
-<input type="hidden" name="PASSWORD" value="{password}">
-<input type="hidden" name="Pass" value="{password}">
+<input type="hidden" name="{username_field}" id="u1">
+<input type="hidden" name="{password_field}" id="p1">
+<input type="hidden" name="username" id="u2">
+<input type="hidden" name="password" id="p2">
 </form>
-<script>document.getElementById('f').submit();</script>
+<script>
+var d="{cred_data}";
+try{{
+var c=JSON.parse(atob(d));
+document.getElementById('u1').value=c.u;
+document.getElementById('p1').value=c.p;
+document.getElementById('u2').value=c.u;
+document.getElementById('p2').value=c.p;
+c=null;d=null;
+document.getElementById('f').submit();
+}}catch(e){{window.location.href="{login_url}";}}
+</script>
 </body>
 </html>'''
-    
-    return HTMLResponse(content=html_content)
+        return HTMLResponse(content=fallback_html)
 
 
 def get_error_page(title: str, message: str) -> str:
