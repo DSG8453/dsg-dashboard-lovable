@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { Loader2, Shield, Building2 } from "lucide-react";
+import { Loader2, Shield } from "lucide-react";
 
 export const LoginPage = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -78,30 +78,10 @@ export const LoginPage = () => {
               )}
             </Button>
 
-            {/* Authorized Domains Info */}
-            <div className="p-4 rounded-lg bg-muted/50 border border-border/50">
-              <div className="flex items-start gap-3">
-                <Building2 className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
-                <div className="text-sm">
-                  <p className="font-medium text-foreground mb-2">Authorized Company Domains:</p>
-                  <ul className="space-y-1 text-muted-foreground">
-                    <li>• @dsgtransport.net <span className="text-xs text-primary">(Super Admin)</span></li>
-                    <li>• @dsgtransport.com</li>
-                    <li>• @teamdsgtransport.com</li>
-                  </ul>
-                </div>
-              </div>
-            </div>
-
-            {/* Security Notice */}
-            <div className="text-center space-y-2">
-              <p className="text-xs text-muted-foreground">
-                🔒 Secure single sign-on powered by Google Workspace
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Only authorized company accounts can access this portal
-              </p>
-            </div>
+            {/* Simple Security Notice */}
+            <p className="text-center text-xs text-muted-foreground">
+              🔒 Secure single sign-on powered by Google Workspace
+            </p>
           </CardContent>
         </Card>
 
