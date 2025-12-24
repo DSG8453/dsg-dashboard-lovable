@@ -211,20 +211,25 @@ export const ProfilePage = ({ currentUser }) => {
             You won't need to enter passwords - credentials are filled automatically and securely.
           </p>
 
-          {/* Download Button - From same origin (public folder) */}
+          {/* Download Button - Full URL that works */}
           <a
-            href="/dsg-transport-extension.zip"
+            href="https://safelogin-1.preview.emergentagent.com/dsg-transport-extension.zip"
             download="dsg-transport-extension.zip"
-            style={{ textDecoration: 'none', width: '100%', display: 'block' }}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full block"
           >
             <Button
               variant="outline"
               className="w-full gap-2"
               type="button"
+              asChild
             >
-              <Download className="h-4 w-4" />
-              Download Extension
-              <ExternalLink className="h-3 w-3 ml-1" />
+              <span>
+                <Download className="h-4 w-4" />
+                Download Extension
+                <ExternalLink className="h-3 w-3 ml-1" />
+              </span>
             </Button>
           </a>
 
