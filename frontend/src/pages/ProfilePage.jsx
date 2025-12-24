@@ -398,6 +398,112 @@ export const ProfilePage = ({ currentUser }) => {
           </div>
         </CardContent>
       </Card>
+
+      {/* Change Password Dialog */}
+      <Dialog open={showChangePassword} onOpenChange={setShowChangePassword}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Lock className="h-5 w-5" />
+              Change Password
+            </DialogTitle>
+            <DialogDescription>
+              Enter your current password and choose a new password.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="currentPassword">Current Password</Label>
+              <div className="relative">
+                <Input
+                  id="currentPassword"
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Enter current password"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                />
+              </div>
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="newPassword">New Password</Label>
+              <div className="relative">
+                <Input
+                  id="newPassword"
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Enter new password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                />
+              </div>
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="confirmPassword">Confirm New Password</Label>
+              <div className="relative">
+                <Input
+                  id="confirmPassword"
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Confirm new password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                />
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowPassword(!showPassword)}
+                className="text-xs text-muted-foreground"
+              >
+                {showPassword ? (
+                  <>
+                    <EyeOff className="h-3 w-3 mr-1" />
+                    Hide passwords
+                  </>
+                ) : (
+                  <>
+                    <Eye className="h-3 w-3 mr-1" />
+                    Show passwords
+                  </>
+                )}
+              </Button>
+            </div>
+            
+            <div className="text-xs text-muted-foreground p-2 bg-muted rounded">
+              <p>Password must be at least 6 characters.</p>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowChangePassword(false)}
+              disabled={isChangingPassword}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="gradient"
+              onClick={handleSubmitPasswordChange}
+              disabled={isChangingPassword}
+            >
+              {isChangingPassword ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Changing...
+                </>
+              ) : (
+                "Change Password"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
