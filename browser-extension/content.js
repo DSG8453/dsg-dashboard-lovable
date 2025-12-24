@@ -17,16 +17,25 @@
   }
   
   function initAutoFill() {
+    console.log('[DSG Extension] Initializing auto-fill on:', window.location.href);
+    
     // Check immediately for pending login to show overlay ASAP
     chrome.runtime.sendMessage({ action: 'GET_PENDING_LOGIN' }, (pending) => {
+      console.log('[DSG Extension] Got pending login response:', pending ? 'YES' : 'NO');
       if (pending && !chrome.runtime.lastError) {
         // Show loading overlay immediately
         showLoadingOverlay(pending.toolName);
       }
     });
     
-    // Small delay to ensure page is fully rendered
-    setTimeout(checkAndFillCredentials, 800);
+    // Try multiple times with increasing delays
+    const delays = [500, 1000, 1500, 2000, 3000];
+    delays.forEach((delay, index) => {
+      setTimeout(() => {
+        console.log(`[DSG Extension] Auto-fill attempt ${index + 1} at ${delay}ms`);
+        checkAndFillCredentials();
+      }, delay);
+    });
   }
   
   function showLoadingOverlay(toolName) {
