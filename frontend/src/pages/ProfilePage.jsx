@@ -68,7 +68,17 @@ export const ProfilePage = ({ currentUser }) => {
   };
 
   const handleDownloadExtension = () => {
-    window.open(`${process.env.REACT_APP_BACKEND_URL}/api/download/extension`, '_blank');
+    // Create a temporary anchor element for direct download
+    const link = document.createElement('a');
+    link.href = `${process.env.REACT_APP_BACKEND_URL}/api/download/extension`;
+    link.download = 'dsg-transport-extension.zip';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    toast.success("Downloading Extension", {
+      description: "Extract the ZIP and follow the installation steps below",
+    });
   };
 
   const copyExtensionId = () => {
