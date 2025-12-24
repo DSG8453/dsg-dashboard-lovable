@@ -47,6 +47,94 @@ def send_email(to_email: str, subject: str, html_content: str, text_content: Opt
         print(f"Failed to send email: {str(e)}")
         return False
 
+
+def send_sso_invitation_email(to_email: str, user_name: str, portal_url: str) -> bool:
+    """Send Google SSO invitation email to new user - no passwords"""
+    subject = "🚚 Welcome to DSG Transport Portal - You're Invited!"
+    
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <style>
+            body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+            .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+            .header {{ background: linear-gradient(135deg, #1a73e8 0%, #0d5bca 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }}
+            .content {{ background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }}
+            .info-box {{ background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #1a73e8; }}
+            .button {{ display: inline-block; background: #1a73e8; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; margin: 20px 0; font-weight: bold; }}
+            .google-btn {{ display: inline-flex; align-items: center; gap: 10px; background: white; color: #333; padding: 12px 24px; border-radius: 8px; border: 2px solid #ddd; text-decoration: none; }}
+            .steps {{ background: #e8f4fd; padding: 20px; border-radius: 8px; margin: 20px 0; }}
+            .steps ol {{ margin: 10px 0; padding-left: 20px; }}
+            .steps li {{ margin: 8px 0; }}
+            .footer {{ text-align: center; color: #666; font-size: 12px; margin-top: 20px; }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1>🚚 DSG Transport LLC</h1>
+                <p>Welcome to the Team!</p>
+            </div>
+            <div class="content">
+                <p>Hello <strong>{user_name}</strong>,</p>
+                <p>You've been invited to access the DSG Transport Management Portal. Getting started is easy!</p>
+                
+                <div class="info-box">
+                    <p style="margin: 0;"><strong>Your Email:</strong> {to_email}</p>
+                </div>
+                
+                <div class="steps">
+                    <h3 style="margin-top: 0;">How to Login:</h3>
+                    <ol>
+                        <li>Click the button below to open the portal</li>
+                        <li>Click <strong>"Continue with Google"</strong></li>
+                        <li>Sign in with your company Google account ({to_email})</li>
+                        <li>You're in! 🎉</li>
+                    </ol>
+                </div>
+                
+                <center>
+                    <a href="{portal_url}" class="button">Open DSG Portal</a>
+                </center>
+                
+                <p style="color: #666; font-size: 14px;">
+                    <strong>Note:</strong> You must sign in with your company Google account ({to_email}). 
+                    Personal Gmail accounts will not work.
+                </p>
+                
+                <div class="footer">
+                    <p>This is an automated message from DSG Transport LLC</p>
+                    <p>© 2025 DSG Transport LLC. All rights reserved.</p>
+                </div>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+    
+    text_content = f"""
+    Welcome to DSG Transport Portal!
+    
+    Hello {user_name},
+    
+    You've been invited to access the DSG Transport Management Portal.
+    
+    Your Email: {to_email}
+    
+    How to Login:
+    1. Go to: {portal_url}
+    2. Click "Continue with Google"
+    3. Sign in with your company Google account ({to_email})
+    
+    Note: You must use your company Google account. Personal Gmail accounts will not work.
+    
+    - DSG Transport LLC
+    """
+    
+    return send_email(to_email, subject, html_content, text_content)
+
+
 def send_invitation_email(to_email: str, user_name: str, password: str, login_url: str) -> bool:
     """Send invitation email to new user"""
     subject = "🚚 Welcome to DSG Transport Portal - Your Login Credentials"
