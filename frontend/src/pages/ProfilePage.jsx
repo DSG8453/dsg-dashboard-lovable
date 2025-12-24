@@ -219,10 +219,10 @@ export const ProfilePage = ({ currentUser }) => {
             <div className="flex items-center gap-2 p-2 bg-background rounded border mb-2">
               <Download className="h-4 w-4 text-primary" />
               <a 
-                href="https://safelogin-1.preview.emergentagent.com/dsg-transport-extension.zip"
+                href="https://securepass-42.preview.emergentagent.com/dsg-transport-extension.zip"
                 className="text-primary underline font-mono text-sm break-all"
               >
-                https://safelogin-1.preview.emergentagent.com/dsg-transport-extension.zip
+                https://securepass-42.preview.emergentagent.com/dsg-transport-extension.zip
               </a>
             </div>
             

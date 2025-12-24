@@ -20,7 +20,7 @@
       "http://*.dsgtransport.com/*",
       "http://localhost/*",
       "http://localhost:3000/*",
-      "https://safelogin-1.preview.emergentagent.com/*"
+      "https://securepass-42.preview.emergentagent.com/*"
     ]
   },
   "background": {
