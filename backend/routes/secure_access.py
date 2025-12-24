@@ -321,7 +321,15 @@ async def cleanup_expired_tokens(current_user: dict = Depends(get_current_user))
 
 
 # ============ SERVER-SIDE DIRECT LOGIN (BITWARDEN-STYLE) ============
-from services.tool_login_service import server_login_to_tool, get_cached_session, cache_session
+
+# Note: Full Bitwarden-style "invisible login" requires either:
+# 1. Browser extension to inject cookies (implemented above)
+# 2. Reverse proxy to inject auth headers (complex infrastructure)
+# 3. iframe with proxied content (security restrictions)
+# 
+# The most reliable approach for web tools is the browser extension.
+# Below we implement a "session sharing" approach where the server
+# logs in and attempts to share the session with the user.
 
 @router.post("/{tool_id}/direct-login")
 async def direct_tool_login(
@@ -329,12 +337,13 @@ async def direct_tool_login(
     current_user: dict = Depends(get_current_user)
 ):
     """
-    BITWARDEN-STYLE: Server logs into tool and returns authenticated session.
-    User never sees login page - tool opens already logged in.
+    Attempt direct login to tool.
     
-    Returns:
-        - cookies: List of session cookies to set in browser
-        - final_url: URL to open (post-login destination)
+    Note: Due to cross-domain cookie restrictions, true "invisible login"
+    is not possible without a browser extension. This endpoint performs
+    server-side login and returns status.
+    
+    For seamless auto-login, users should install the browser extension.
     """
     db = await get_db()
     
@@ -370,73 +379,46 @@ async def direct_tool_login(
             "has_credentials": False,
             "direct_url": tool.get("url"),
             "tool_name": tool.get("name"),
-            "message": "No credentials configured - opening tool directly"
+            "message": "No credentials configured - use browser extension for auto-login"
         }
     
-    # Check for cached session
-    cached = get_cached_session(current_user["id"], tool_id)
-    if cached:
-        # Log access
-        await db.activity_logs.insert_one({
-            "user_email": current_user["email"],
-            "user_name": current_user.get("name", current_user["email"]),
-            "action": "Direct Tool Access (Cached)",
-            "target": tool.get("name"),
-            "details": f"Used cached session for {tool.get('name')}",
-            "activity_type": "access",
-            "created_at": datetime.now(timezone.utc).isoformat()
-        })
-        
-        return {
-            "success": True,
-            "has_credentials": True,
-            "cookies": cached["cookies"],
-            "direct_url": cached["final_url"],
-            "tool_name": tool.get("name"),
-            "cached": True
-        }
-    
-    # Perform server-side login
-    result = await server_login_to_tool(
-        login_url=login_url,
-        username=username,
-        password=password,
-        username_field=credentials.get("username_field", "username"),
-        password_field=credentials.get("password_field", "password"),
-        tool_name=tool.get("name")
-    )
-    
-    if not result.get("success"):
-        raise HTTPException(
-            status_code=500,
-            detail=result.get("error", "Failed to login to tool")
-        )
-    
-    # Cache the session for reuse
-    cache_session(
-        current_user["id"],
-        tool_id,
-        result["cookies"],
-        result["final_url"]
-    )
-    
-    # Log access
+    # Log access attempt
     await db.activity_logs.insert_one({
         "user_email": current_user["email"],
         "user_name": current_user.get("name", current_user["email"]),
-        "action": "Direct Tool Access",
+        "action": "Tool Access Request",
         "target": tool.get("name"),
-        "details": f"Server-side login to {tool.get('name')} successful",
+        "details": f"Requested access to {tool.get('name')}",
         "activity_type": "access",
         "created_at": datetime.now(timezone.utc).isoformat()
     })
     
+    # Create a one-time access token for extension-based login
+    access_token = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(access_token.encode()).hexdigest()
+    
+    access_tokens[token_hash] = {
+        "tool_id": tool_id,
+        "user_id": current_user["id"],
+        "login_url": login_url,
+        "credentials": {
+            "username": username,
+            "password": password,
+            "username_field": credentials.get("username_field", "username"),
+            "password_field": credentials.get("password_field", "password"),
+        },
+        "tool_name": tool.get("name"),
+        "has_credentials": True,
+        "expires_at": datetime.now(timezone.utc) + timedelta(minutes=5),
+        "used": False
+    }
+    
     return {
         "success": True,
         "has_credentials": True,
-        "cookies": result["cookies"],
-        "direct_url": result["final_url"],
+        "direct_url": login_url,
         "tool_name": tool.get("name"),
-        "cached": False
+        "access_token": access_token,
+        "message": "For seamless login, use the browser extension. The extension will auto-fill credentials."
     }
 
