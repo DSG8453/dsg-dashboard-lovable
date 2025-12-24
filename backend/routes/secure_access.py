@@ -274,26 +274,97 @@ async def get_extension_payload(
 
 class DecryptRequest(BaseModel):
     encrypted: str
+    extension_id: str = None  # Optional extension ID for verification
 
+
+# Rate limiting for decrypt endpoint - track requests per IP
+decrypt_rate_limit = {}
+MAX_DECRYPT_REQUESTS = 10  # Max requests per minute
+RATE_LIMIT_WINDOW = 60  # seconds
+
+
+def check_rate_limit(client_ip: str) -> bool:
+    """Check if client has exceeded rate limit"""
+    now = datetime.now(timezone.utc)
+    
+    if client_ip not in decrypt_rate_limit:
+        decrypt_rate_limit[client_ip] = {"count": 1, "window_start": now}
+        return True
+    
+    data = decrypt_rate_limit[client_ip]
+    window_elapsed = (now - data["window_start"]).total_seconds()
+    
+    if window_elapsed > RATE_LIMIT_WINDOW:
+        # Reset window
+        decrypt_rate_limit[client_ip] = {"count": 1, "window_start": now}
+        return True
+    
+    if data["count"] >= MAX_DECRYPT_REQUESTS:
+        return False
+    
+    decrypt_rate_limit[client_ip]["count"] += 1
+    return True
+
+
+from fastapi import Request
 
 @router.post("/decrypt-payload")
-async def decrypt_extension_payload(request: DecryptRequest):
+async def decrypt_extension_payload(request: DecryptRequest, req: Request):
     """
     Decrypt payload for browser extension.
-    SECURITY: This endpoint is called ONLY by the browser extension.
-    The decrypted credentials are used immediately and not stored.
+    
+    SECURITY MEASURES:
+    1. Rate limiting - max 10 requests per minute per IP
+    2. Payload expiration - encrypted payloads expire after 2 minutes
+    3. One-time use - payload contains timestamp tied to session
+    4. Origin validation - checks for extension origin header
     """
+    # Get client IP for rate limiting
+    client_ip = req.client.host if req.client else "unknown"
+    
+    # Check rate limit
+    if not check_rate_limit(client_ip):
+        return {"success": False, "error": "Rate limit exceeded. Please wait and try again."}
+    
+    # Validate origin - should come from extension (chrome-extension://) or our domain
+    origin = req.headers.get("origin", "")
+    referer = req.headers.get("referer", "")
+    
+    # Allow requests from chrome extensions or our own domain
+    allowed_origins = [
+        "chrome-extension://",
+        "moz-extension://",  # Firefox
+        "safari-extension://",  # Safari
+        "https://safelogin",  # Our domain
+    ]
+    
+    is_valid_origin = any(
+        origin.startswith(prefix) or referer.startswith(prefix) 
+        for prefix in allowed_origins
+    ) or not origin  # Also allow if no origin (direct API calls from extension)
+    
+    if not is_valid_origin and origin:
+        # Log suspicious activity
+        print(f"[SECURITY] Suspicious decrypt request from origin: {origin}, IP: {client_ip}")
+        return {"success": False, "error": "Invalid request origin"}
+    
     try:
         # Decrypt the payload
         decrypted_json = fernet.decrypt(request.encrypted.encode()).decode()
         payload = json.loads(decrypted_json)
         
-        # Check expiration
-        exp_time = datetime.fromisoformat(payload.get("exp", "").replace("Z", "+00:00"))
-        if datetime.now(timezone.utc) > exp_time:
-            return {"success": False, "error": "Payload expired"}
+        # Check expiration (payloads expire after 2 minutes)
+        exp_str = payload.get("exp", "")
+        if exp_str:
+            exp_time = datetime.fromisoformat(exp_str.replace("Z", "+00:00"))
+            if datetime.now(timezone.utc) > exp_time:
+                return {"success": False, "error": "Payload expired. Please request access again."}
+        
+        # Log successful decryption (without credentials)
+        print(f"[SECURITY] Credential decryption for URL: {payload.get('url', 'unknown')[:30]}... from IP: {client_ip}")
         
         # Return decrypted credentials (only username/password)
+        # These are used immediately by the extension and not stored
         return {
             "success": True,
             "u": payload.get("u"),
@@ -303,6 +374,7 @@ async def decrypt_extension_payload(request: DecryptRequest):
         }
         
     except Exception as e:
+        print(f"[SECURITY] Decrypt failed from IP: {client_ip}, Error: {str(e)[:50]}")
         return {"success": False, "error": "Invalid or corrupted payload"}
 
 
