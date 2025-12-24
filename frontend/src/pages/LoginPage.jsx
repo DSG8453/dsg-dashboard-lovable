@@ -176,9 +176,40 @@ export const LoginPage = () => {
   // Back to login
   const handleBackToLogin = () => {
     setShowOtpScreen(false);
+    setShowForgotPassword(false);
+    setResetEmailSent(false);
     setOtp(["", "", "", "", "", ""]);
     setTempToken("");
     setPassword("");
+    setForgotEmail("");
+  };
+
+  // Handle forgot password submission
+  const handleForgotPassword = async (e) => {
+    e.preventDefault();
+    
+    if (!forgotEmail) {
+      toast.error("Please enter your email address");
+      return;
+    }
+    
+    setIsLoading(true);
+    
+    try {
+      await authAPI.forgotPassword(forgotEmail);
+      setResetEmailSent(true);
+      toast.success("Reset link sent!", {
+        description: "Check your email for password reset instructions.",
+      });
+    } catch (error) {
+      // Still show success to prevent email enumeration
+      setResetEmailSent(true);
+      toast.success("Reset link sent!", {
+        description: "If an account exists, you'll receive an email shortly.",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleSSOLogin = async (provider) => {
@@ -195,6 +226,121 @@ export const LoginPage = () => {
       });
     }
   };
+
+  // Forgot Password Screen
+  if (showForgotPassword) {
+    return (
+      <div className="min-h-screen bg-gradient-dsg flex items-center justify-center p-4">
+        <div className="w-full max-w-md">
+          {/* Logo Header */}
+          <div className="text-center mb-8">
+            <div className="flex justify-center mb-4">
+              <img
+                src="https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/691ee53ded166d6334e8b9c6/0583cf617_315logodsg_.png"
+                alt="DSG Transport LLC"
+                className="h-16 w-auto"
+              />
+            </div>
+            <h1 className="text-2xl font-bold text-foreground">DSG TRANSPORT LLC</h1>
+            <p className="text-muted-foreground">Password Recovery</p>
+          </div>
+
+          <Card className="border-2 border-border/50 shadow-xl">
+            <CardHeader className="text-center">
+              <div className="mx-auto mb-2 p-3 rounded-full bg-primary/10 w-fit">
+                {resetEmailSent ? (
+                  <CheckCircle className="h-6 w-6 text-success" />
+                ) : (
+                  <KeyRound className="h-6 w-6 text-primary" />
+                )}
+              </div>
+              <CardTitle>
+                {resetEmailSent ? "Check Your Email" : "Forgot Password?"}
+              </CardTitle>
+              <CardDescription>
+                {resetEmailSent 
+                  ? "We've sent a password reset link to your email"
+                  : "Enter your email and we'll send you a reset link"
+                }
+              </CardDescription>
+            </CardHeader>
+
+            <CardContent className="space-y-6">
+              {resetEmailSent ? (
+                <>
+                  <div className="p-4 rounded-lg bg-success/10 border border-success/20 text-center">
+                    <Mail className="h-8 w-8 text-success mx-auto mb-2" />
+                    <p className="text-sm text-muted-foreground">
+                      A password reset link has been sent to:
+                    </p>
+                    <p className="font-semibold">{forgotEmail}</p>
+                  </div>
+                  
+                  <div className="text-sm text-muted-foreground space-y-2">
+                    <p>• Check your inbox (and spam folder)</p>
+                    <p>• Link expires in 1 hour</p>
+                    <p>• Contact admin if you don't receive it</p>
+                  </div>
+
+                  <Button
+                    variant="outline"
+                    className="w-full gap-2"
+                    onClick={handleBackToLogin}
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                    Back to Login
+                  </Button>
+                </>
+              ) : (
+                <form onSubmit={handleForgotPassword} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="forgotEmail">Email Address</Label>
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        id="forgotEmail"
+                        type="email"
+                        placeholder="you@dsgtransport.com"
+                        className="pl-10"
+                        value={forgotEmail}
+                        onChange={(e) => setForgotEmail(e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <Button
+                    type="submit"
+                    variant="gradient"
+                    className="w-full h-11"
+                    disabled={isLoading}
+                  >
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Sending...
+                      </>
+                    ) : (
+                      "Send Reset Link"
+                    )}
+                  </Button>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full gap-2"
+                    onClick={handleBackToLogin}
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                    Back to Login
+                  </Button>
+                </form>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
   // OTP Verification Screen
   if (showOtpScreen) {
