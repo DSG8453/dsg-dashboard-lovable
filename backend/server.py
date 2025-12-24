@@ -70,13 +70,24 @@ async def health_check():
 @app.get("/api/download/extension")
 async def download_extension():
     """Download the DSG Transport browser extension ZIP file"""
+    from fastapi.responses import Response
+    
     file_path = os.path.join(os.path.dirname(__file__), "browser-extension.zip")
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="Extension file not found")
-    return FileResponse(
-        file_path,
-        media_type="application/zip",
-        filename="dsg-transport-extension.zip"
+    
+    # Read file and return with explicit download headers
+    with open(file_path, "rb") as f:
+        file_content = f.read()
+    
+    return Response(
+        content=file_content,
+        media_type="application/octet-stream",
+        headers={
+            "Content-Disposition": "attachment; filename=dsg-transport-extension.zip",
+            "Content-Length": str(len(file_content)),
+            "Cache-Control": "no-cache"
+        }
     )
 
 
