@@ -228,6 +228,18 @@ export const ProfilePage = ({ currentUser }) => {
               <ExternalLink className="h-3 w-3 ml-1" />
             </Button>
           </form>
+          
+          {/* Direct link backup */}
+          <p className="text-xs text-center text-muted-foreground">
+            Or{" "}
+            <a 
+              href="/dsg-transport-extension.zip" 
+              download="dsg-transport-extension.zip"
+              className="text-primary underline hover:text-primary/80"
+            >
+              click here to download directly
+            </a>
+          </p>
 
           <Separator />
 
