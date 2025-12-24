@@ -211,59 +211,22 @@ export const ProfilePage = ({ currentUser }) => {
             You won't need to enter passwords - credentials are filled automatically and securely.
           </p>
 
-          {/* Download Button - Direct download without new window */}
-          <Button
-            variant="outline"
-            className="w-full gap-2"
-            onClick={async () => {
-              try {
-                toast.info("Starting download...");
-                
-                const downloadUrl = `${process.env.REACT_APP_BACKEND_URL}/api/download/extension`;
-                
-                // Fetch the file
-                const response = await fetch(downloadUrl, {
-                  method: 'GET',
-                  headers: {
-                    'Accept': 'application/octet-stream',
-                  },
-                });
-                
-                if (!response.ok) {
-                  throw new Error('Download failed');
-                }
-                
-                // Get the blob
-                const blob = await response.blob();
-                
-                // Create object URL and trigger download
-                const url = window.URL.createObjectURL(blob);
-                const link = document.createElement('a');
-                link.href = url;
-                link.download = 'dsg-transport-extension.zip';
-                link.style.display = 'none';
-                document.body.appendChild(link);
-                link.click();
-                
-                // Cleanup
-                document.body.removeChild(link);
-                window.URL.revokeObjectURL(url);
-                
-                toast.success("Download Complete!", {
-                  description: "Check your Downloads folder for dsg-transport-extension.zip",
-                });
-              } catch (error) {
-                console.error('Download error:', error);
-                toast.error("Download failed", {
-                  description: "Please try again or contact support",
-                });
-              }
-            }}
+          {/* Download Button - Simple HTML link */}
+          <a
+            href="https://safelogin-1.preview.emergentagent.com/api/download/extension"
+            download
+            style={{ textDecoration: 'none', width: '100%', display: 'block' }}
           >
-            <Download className="h-4 w-4" />
-            Download Extension
-            <ExternalLink className="h-3 w-3 ml-1" />
-          </Button>
+            <Button
+              variant="outline"
+              className="w-full gap-2"
+              type="button"
+            >
+              <Download className="h-4 w-4" />
+              Download Extension
+              <ExternalLink className="h-3 w-3 ml-1" />
+            </Button>
+          </a>
 
           <Separator />
 
