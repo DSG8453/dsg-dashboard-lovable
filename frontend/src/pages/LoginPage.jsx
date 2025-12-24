@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { Loader2, Shield } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
 export const LoginPage = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -38,21 +38,10 @@ export const LoginPage = () => {
             />
           </div>
           <h1 className="text-3xl font-bold text-foreground">DSG TRANSPORT LLC</h1>
-          <p className="text-muted-foreground mt-1">Secure Credential Management Portal</p>
         </div>
 
         <Card className="border-2 border-border/50 shadow-xl">
-          <CardHeader className="text-center pb-2">
-            <div className="mx-auto mb-2 p-3 rounded-full bg-primary/10 w-fit">
-              <Shield className="h-8 w-8 text-primary" />
-            </div>
-            <CardTitle className="text-xl">Welcome Back</CardTitle>
-            <CardDescription>
-              Sign in with your company Google account
-            </CardDescription>
-          </CardHeader>
-
-          <CardContent className="space-y-6 pt-4">
+          <CardContent className="p-6">
             {/* Google SSO Button */}
             <Button
               variant="outline"
@@ -77,11 +66,6 @@ export const LoginPage = () => {
                 </>
               )}
             </Button>
-
-            {/* Simple Security Notice */}
-            <p className="text-center text-xs text-muted-foreground">
-              🔒 Secure single sign-on powered by Google Workspace
-            </p>
           </CardContent>
         </Card>
 
