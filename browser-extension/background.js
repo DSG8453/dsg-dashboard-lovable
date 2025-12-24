@@ -237,16 +237,17 @@ function getBackendUrl() {
   // The dashboard sends its origin when communicating with the extension
   // Default fallback URLs in priority order
   const fallbackUrls = [
+    'https://portal.dsgtransport.net',
+    'https://api.portal.dsgtransport.net',
     'https://secure.dsgtransport.net',
     'https://app.dsgtransport.net', 
-    'https://portal.dsgtransport.net',
     'https://secure.dsgtransport.com',
     'https://app.dsgtransport.com',
     'https://securepass-42.preview.emergentagent.com'
   ];
   
-  // Return the first fallback (will be overridden by dynamic detection)
-  return fallbackUrls[fallbackUrls.length - 1]; // Use preview URL as default for now
+  // Return the production URL as default
+  return fallbackUrls[0];
 }
 
 // Store the backend URL when we receive a message from the dashboard
