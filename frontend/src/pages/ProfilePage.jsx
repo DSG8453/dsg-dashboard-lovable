@@ -206,51 +206,32 @@ export const ProfilePage = ({ currentUser }) => {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            Install the DSG Transport browser extension for <strong>automatic login</strong> to tools. 
-            You won't need to enter passwords - credentials are filled automatically and securely.
-          </p>
-
-          {/* Download Section */}
-          <div className="p-4 bg-muted/50 rounded-lg border">
-            <p className="text-sm font-medium mb-3">Download the extension:</p>
-            
-            {/* Method 1: Direct visible link */}
-            <div className="flex items-center gap-2 p-2 bg-background rounded border mb-2">
-              <Download className="h-4 w-4 text-primary" />
-              <a 
-                href="https://securepass-42.preview.emergentagent.com/dsg-transport-extension.zip"
-                className="text-primary underline font-mono text-sm break-all"
-              >
-                https://securepass-42.preview.emergentagent.com/dsg-transport-extension.zip
-              </a>
-            </div>
-            
-            <p className="text-xs text-muted-foreground">
-              👆 <strong>Right-click</strong> the link above and select <strong>"Save Link As..."</strong>
+          {/* Auto-Install Notice for Regular Users */}
+          <div className="p-4 bg-success/10 border border-success/20 rounded-lg">
+            <p className="text-sm font-medium text-success flex items-center gap-2">
+              <Check className="h-4 w-4" />
+              Auto-Install Enabled via Google Workspace
+            </p>
+            <p className="text-xs text-muted-foreground mt-2">
+              The DSG Transport extension is <strong>automatically installed</strong> on all company Chrome browsers. 
+              If you don't see it, make sure you're signed into Chrome with your company Google account.
             </p>
           </div>
 
-          <Separator />
-
-          {/* Extension ID Input */}
+          {/* Extension Status Check */}
           <div className="space-y-2">
-            <Label htmlFor="extensionId" className="text-sm font-medium">
-              Extension ID
-            </Label>
-            <p className="text-xs text-muted-foreground">
-              After installing, go to <code className="bg-muted px-1 rounded">chrome://extensions</code> and copy your extension ID
-            </p>
+            <Label className="text-sm font-medium">Extension Status</Label>
             <div className="flex gap-2">
               <Input
                 id="extensionId"
-                placeholder="e.g., abcdefghijklmnopqrstuvwxyz..."
+                placeholder="Extension ID will auto-detect..."
                 value={extensionId}
                 onChange={(e) => {
                   setExtensionId(e.target.value);
                   setIsExtensionSaved(false);
                 }}
                 className="flex-1"
+                readOnly={isExtensionSaved}
               />
               {extensionId && (
                 <Button
@@ -276,10 +257,10 @@ export const ProfilePage = ({ currentUser }) => {
               {isExtensionSaved ? (
                 <>
                   <Check className="h-4 w-4 text-success" />
-                  Saved
+                  Connected
                 </>
               ) : (
-                "Save Extension ID"
+                "Connect Extension"
               )}
             </Button>
             {isExtensionSaved && (
@@ -287,34 +268,80 @@ export const ProfilePage = ({ currentUser }) => {
                 variant="destructive"
                 onClick={handleClearExtensionId}
               >
-                Remove
+                Disconnect
               </Button>
             )}
           </div>
 
-          {/* Status */}
+          {/* Connected Status */}
           {isExtensionSaved && (
             <div className="p-3 rounded-lg bg-success/10 border border-success/20">
               <p className="text-sm text-success font-medium flex items-center gap-2">
                 <Check className="h-4 w-4" />
-                Extension Connected
+                Extension Connected - Auto-Login Ready
               </p>
               <p className="text-xs text-muted-foreground mt-1">
-                Auto-login is enabled. Click "Open Tool" on any tool to login automatically.
+                Click "Open Tool" on any tool to login automatically. No passwords needed!
               </p>
             </div>
           )}
 
-          {/* Instructions */}
-          <div className="p-3 rounded-lg bg-muted/50 text-xs space-y-2">
-            <p className="font-medium">How to install:</p>
+          <Separator />
+
+          {/* Super Admin Only: Manual Setup Section */}
+          {currentUser?.role === 'Super Admin' && (
+            <div className="p-4 bg-muted/30 rounded-lg border border-dashed">
+              <p className="text-sm font-medium mb-3 flex items-center gap-2">
+                <Shield className="h-4 w-4 text-admin" />
+                Admin: Manual Install / Download
+              </p>
+              
+              <div className="space-y-3">
+                <Button
+                  variant="outline"
+                  className="w-full gap-2"
+                  onClick={handleDownloadExtension}
+                >
+                  <Download className="h-4 w-4" />
+                  Download Extension ZIP
+                </Button>
+                
+                <a 
+                  href="/dsg-transport-extension.zip"
+                  download="dsg-transport-extension.zip"
+                  className="block"
+                >
+                  <Button variant="ghost" className="w-full gap-2 text-xs">
+                    <ExternalLink className="h-3 w-3" />
+                    Direct Link (Right-click → Save As)
+                  </Button>
+                </a>
+
+                <div className="text-xs text-muted-foreground space-y-1 mt-2">
+                  <p className="font-medium">Google Workspace Deployment:</p>
+                  <ul className="list-disc list-inside space-y-1 pl-2">
+                    <li>Go to <code className="bg-muted px-1 rounded">admin.google.com</code></li>
+                    <li>Devices → Chrome → Apps & extensions</li>
+                    <li>Add extension with update URL below</li>
+                  </ul>
+                  <div className="mt-2 p-2 bg-background rounded border">
+                    <code className="text-[10px] break-all select-all">
+                      {window.location.origin}/extension-update.xml
+                    </code>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Quick Help */}
+          <div className="p-3 rounded-lg bg-muted/50 text-xs">
+            <p className="font-medium mb-2">Not seeing the extension?</p>
             <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
-              <li>Click "Download Extension" above</li>
-              <li>Extract the ZIP file to a folder</li>
-              <li>Open Chrome → <code className="bg-muted px-1 rounded">chrome://extensions</code></li>
-              <li>Enable "Developer mode" (top-right toggle)</li>
-              <li>Click "Load unpacked" → Select the folder</li>
-              <li>Copy the Extension ID and paste it above</li>
+              <li>Sign into Chrome with your <strong>company Google account</strong></li>
+              <li>Go to <code className="bg-muted px-1 rounded">chrome://extensions</code></li>
+              <li>Look for "DSG Transport Secure Login"</li>
+              <li>If missing, contact your IT administrator</li>
             </ol>
           </div>
         </CardContent>
