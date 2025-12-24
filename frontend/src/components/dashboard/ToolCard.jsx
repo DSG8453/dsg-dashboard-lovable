@@ -256,32 +256,6 @@ export const ToolCard = ({ tool, onDelete, onUpdate }) => {
       setIsAccessingTool(false);
     }
   };
-  };
-
-  // Fallback: Open tool directly (for non-extension users or when extension fails)
-  const handleDirectAccess = async () => {
-    setIsAccessingTool(true);
-    
-    try {
-      const response = await toolsAPI.requestSecureAccess(tool.id);
-      
-      if (response.login_url) {
-        // Just open the tool URL - user will need to login manually
-        window.open(response.login_url, "_blank", "noopener,noreferrer");
-        
-        toast.info(`${tool.name} opened`, {
-          description: "Please login manually (extension not detected)",
-        });
-      }
-    } catch (error) {
-      console.error("Failed to access tool:", error);
-      toast.error("Failed to access tool", {
-        description: "Please contact Super Admin for assistance",
-      });
-    } finally {
-      setIsAccessingTool(false);
-    }
-  };
 
   // Main access handler - tries extension first, falls back to direct
   const handleToolAccess = async () => {
