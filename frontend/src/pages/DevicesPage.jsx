@@ -349,6 +349,9 @@ export const DevicesPage = () => {
             <DeviceTable 
               devices={pendingDevices} 
               onManage={handleManageDevice}
+              onApprove={handleQuickApprove}
+              onBlock={handleQuickBlock}
+              onReactivate={handleQuickReactivate}
               showUser={true}
             />
           </TabsContent>
@@ -357,6 +360,9 @@ export const DevicesPage = () => {
             <DeviceTable 
               devices={approvedDevices} 
               onManage={handleManageDevice}
+              onApprove={handleQuickApprove}
+              onBlock={handleQuickBlock}
+              onReactivate={handleQuickReactivate}
               showUser={true}
             />
           </TabsContent>
@@ -365,6 +371,9 @@ export const DevicesPage = () => {
             <DeviceTable 
               devices={otherDevices} 
               onManage={handleManageDevice}
+              onApprove={handleQuickApprove}
+              onBlock={handleQuickBlock}
+              onReactivate={handleQuickReactivate}
               showUser={true}
             />
           </TabsContent>
