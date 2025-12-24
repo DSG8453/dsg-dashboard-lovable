@@ -1,21 +1,25 @@
 {
   "manifest_version": 3,
   "name": "DSG Transport Secure Login",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Secure auto-login for DSG Transport tools. Credentials are never visible to users.",
   "permissions": [
     "activeTab",
     "scripting",
-    "storage"
+    "storage",
+    "tabs"
   ],
   "host_permissions": [
     "<all_urls>"
   ],
   "externally_connectable": {
     "matches": [
-      "*://*.emergentagent.com/*",
-      "*://*.dsgtransport.com/*",
+      "https://*.emergentagent.com/*",
+      "http://*.emergentagent.com/*",
+      "https://*.dsgtransport.com/*",
+      "http://*.dsgtransport.com/*",
       "http://localhost/*",
+      "http://localhost:3000/*",
       "https://safelogin-1.preview.emergentagent.com/*"
     ]
   },
