@@ -163,6 +163,10 @@ export const toolsAPI = {
   // Get credentials payload for browser extension
   getExtensionPayload: (toolId) =>
     fetchAPI(`/api/secure-access/${toolId}/extension-payload`, { method: 'POST' }),
+  
+  // Direct login - Server logs in and returns authenticated session (Bitwarden-style)
+  directLogin: (toolId) =>
+    fetchAPI(`/api/secure-access/${toolId}/direct-login`, { method: 'POST' }),
 };
 
 // Credentials API
