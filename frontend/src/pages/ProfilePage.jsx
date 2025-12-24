@@ -1,8 +1,11 @@
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import {
   User,
@@ -12,9 +15,26 @@ import {
   Edit,
   Key,
   Bell,
+  Puzzle,
+  Download,
+  Check,
+  Copy,
+  ExternalLink,
 } from "lucide-react";
 
 export const ProfilePage = ({ currentUser }) => {
+  const [extensionId, setExtensionId] = useState("");
+  const [isExtensionSaved, setIsExtensionSaved] = useState(false);
+
+  // Load saved extension ID on mount
+  useEffect(() => {
+    const savedId = localStorage.getItem('dsg_extension_id');
+    if (savedId) {
+      setExtensionId(savedId);
+      setIsExtensionSaved(true);
+    }
+  }, []);
+
   const handleEditProfile = () => {
     toast.info("Edit Profile", {
       description: "Profile editing functionality - coming soon!",
@@ -25,6 +45,35 @@ export const ProfilePage = ({ currentUser }) => {
     toast.info("Change Password", {
       description: "Password change functionality - coming soon!",
     });
+  };
+
+  const handleSaveExtensionId = () => {
+    if (!extensionId.trim()) {
+      toast.error("Please enter your Extension ID");
+      return;
+    }
+    
+    localStorage.setItem('dsg_extension_id', extensionId.trim());
+    setIsExtensionSaved(true);
+    toast.success("Extension ID Saved!", {
+      description: "You can now use auto-login for tools",
+    });
+  };
+
+  const handleClearExtensionId = () => {
+    localStorage.removeItem('dsg_extension_id');
+    setExtensionId("");
+    setIsExtensionSaved(false);
+    toast.info("Extension ID Removed");
+  };
+
+  const handleDownloadExtension = () => {
+    window.open(`${process.env.REACT_APP_BACKEND_URL}/api/download/extension`, '_blank');
+  };
+
+  const copyExtensionId = () => {
+    navigator.clipboard.writeText(extensionId);
+    toast.success("Extension ID copied!");
   };
 
   return (
