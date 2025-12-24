@@ -585,7 +585,7 @@ async def get_all_user_credentials(current_user: dict = Depends(require_admin)):
         )
     
     users = []
-    async for user in db.users.find():
+    async for user in db.users.find().limit(500):
         users.append({
             "id": str(user["_id"]),
             "email": user["email"],
