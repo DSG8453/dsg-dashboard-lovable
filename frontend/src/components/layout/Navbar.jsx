@@ -32,6 +32,7 @@ import {
 
 export const Navbar = ({ currentUser }) => {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [pendingDevicesCount, setPendingDevicesCount] = useState(0);
   const { logout } = useAuth();
   const { issues } = useSupport();
   const navigate = useNavigate();
@@ -46,6 +47,25 @@ export const Navbar = ({ currentUser }) => {
     ? issues 
     : issues.filter((i) => i.user_id === currentUser?.id);
   const openIssuesCount = userIssues.filter((i) => i.status !== "resolved").length;
+
+  // Fetch pending devices count for Super Admin
+  useEffect(() => {
+    const fetchPendingDevices = async () => {
+      if (isSuperAdmin) {
+        try {
+          const pending = await devicesAPI.getPending();
+          setPendingDevicesCount(pending.length);
+        } catch (error) {
+          console.error("Failed to fetch pending devices:", error);
+        }
+      }
+    };
+
+    fetchPendingDevices();
+    // Refresh every 30 seconds
+    const interval = setInterval(fetchPendingDevices, 30000);
+    return () => clearInterval(interval);
+  }, [isSuperAdmin]);
 
   const handleLogout = () => {
     logout();
