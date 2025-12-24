@@ -85,25 +85,36 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 // NEW: Handle secure login with encrypted payload
 async function handleSecureLogin(request, sendResponse) {
   try {
-    console.log('[DSG Extension] Starting SECURE auto-login for:', request.toolName);
+    console.log('[DSG Extension] ===== STARTING SECURE LOGIN =====');
+    console.log('[DSG Extension] Tool:', request.toolName);
+    console.log('[DSG Extension] Login URL:', request.loginUrl);
+    console.log('[DSG Extension] Has encrypted payload:', !!request.encryptedPayload);
     
     // Get the decryption from backend
-    const decryptResponse = await fetch(getBackendUrl() + '/api/secure-access/decrypt-payload', {
+    const backendUrl = getBackendUrl();
+    console.log('[DSG Extension] Calling decrypt API at:', backendUrl);
+    
+    const decryptResponse = await fetch(backendUrl + '/api/secure-access/decrypt-payload', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Origin': chrome.runtime.getURL('') // Identify as extension
+        'Origin': chrome.runtime.getURL('')
       },
       body: JSON.stringify({
         encrypted: request.encryptedPayload
       })
     });
     
+    console.log('[DSG Extension] Decrypt response status:', decryptResponse.status);
+    
     if (!decryptResponse.ok) {
-      throw new Error('Failed to decrypt credentials');
+      const errorText = await decryptResponse.text();
+      console.error('[DSG Extension] Decrypt failed:', errorText);
+      throw new Error('Failed to decrypt credentials: ' + errorText);
     }
     
     const decrypted = await decryptResponse.json();
+    console.log('[DSG Extension] Decrypt result:', { success: decrypted.success, hasUsername: !!decrypted.u, hasPassword: !!decrypted.p });
     
     if (!decrypted.success) {
       throw new Error(decrypted.error || 'Decryption failed');
@@ -117,35 +128,50 @@ async function handleSecureLogin(request, sendResponse) {
       usernameField: request.usernameField || decrypted.uf || 'username',
       passwordField: request.passwordField || decrypted.pf || 'password',
       toolName: request.toolName,
-      autoSubmit: true, // Enable auto-click login button
+      autoSubmit: true,
       timestamp: Date.now()
     };
     
+    console.log('[DSG Extension] Storing pending login:', {
+      url: loginData.url,
+      usernameField: loginData.usernameField,
+      passwordField: loginData.passwordField,
+      toolName: loginData.toolName
+    });
+    
     // Store the pending login
     await chrome.storage.local.set({ pendingLogin: loginData });
+    console.log('[DSG Extension] Pending login stored successfully');
+    
+    // Verify storage
+    const stored = await chrome.storage.local.get('pendingLogin');
+    console.log('[DSG Extension] Verified storage:', !!stored.pendingLogin);
     
     // Open the login URL in a new tab
+    console.log('[DSG Extension] Opening tab:', request.loginUrl);
     const tab = await chrome.tabs.create({ 
       url: request.loginUrl,
       active: true
     });
     
-    console.log('[DSG Extension] Opened secure tab:', tab.id, 'Auto-login enabled');
+    console.log('[DSG Extension] Tab opened:', tab.id);
     
     // Clear credentials from memory after they're used
     setTimeout(() => {
       loginData.username = null;
       loginData.password = null;
-    }, 15000); // 15 seconds max
+    }, 15000);
     
     sendResponse({ 
       success: true, 
       tabId: tab.id,
-      message: 'Auto-login initiated - signing you in automatically'
+      message: 'Auto-login initiated'
     });
     
   } catch (error) {
-    console.error('[DSG Extension] Secure login error:', error);
+    console.error('[DSG Extension] ===== SECURE LOGIN ERROR =====');
+    console.error('[DSG Extension] Error:', error.message);
+    console.error('[DSG Extension] Stack:', error.stack);
     sendResponse({ 
       success: false, 
       error: error.message 
