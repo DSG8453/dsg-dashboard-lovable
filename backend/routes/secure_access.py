@@ -284,6 +284,40 @@ async def get_extension_payload(
     }
 
 
+class DecryptRequest(BaseModel):
+    encrypted: str
+
+
+@router.post("/decrypt-payload")
+async def decrypt_extension_payload(request: DecryptRequest):
+    """
+    Decrypt payload for browser extension.
+    SECURITY: This endpoint is called ONLY by the browser extension.
+    The decrypted credentials are used immediately and not stored.
+    """
+    try:
+        # Decrypt the payload
+        decrypted_json = fernet.decrypt(request.encrypted.encode()).decode()
+        payload = json.loads(decrypted_json)
+        
+        # Check expiration
+        exp_time = datetime.fromisoformat(payload.get("exp", "").replace("Z", "+00:00"))
+        if datetime.now(timezone.utc) > exp_time:
+            return {"success": False, "error": "Payload expired"}
+        
+        # Return decrypted credentials (only username/password)
+        return {
+            "success": True,
+            "u": payload.get("u"),
+            "p": payload.get("p"),
+            "uf": payload.get("uf"),
+            "pf": payload.get("pf")
+        }
+        
+    except Exception as e:
+        return {"success": False, "error": "Invalid or corrupted payload"}
+
+
 @router.delete("/tokens/cleanup")
 async def cleanup_expired_tokens(current_user: dict = Depends(get_current_user)):
     """Clean up expired tokens"""
