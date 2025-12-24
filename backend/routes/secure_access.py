@@ -99,8 +99,8 @@ async def request_tool_access(
 @router.get("/launch/{access_token}")
 async def launch_tool(access_token: str):
     """
-    Launch tool - opens login page and submits credentials via form.
-    Credentials are hidden in encoded format.
+    Launch tool - redirects to login page.
+    For auto-fill, use the browser extension.
     """
     token_hash = hashlib.sha256(access_token.encode()).hexdigest()
     token_data = access_tokens.get(token_hash)
@@ -130,54 +130,104 @@ async def launch_tool(access_token: str):
     
     username = credentials.get("username", "")
     password = credentials.get("password", "")
-    username_field = credentials.get("username_field", "username")
-    password_field = credentials.get("password_field", "password")
     
-    # Encode credentials to hide them in the HTML
-    cred_json = json.dumps({"u": username, "p": password})
-    encoded_creds = base64.b64encode(cred_json.encode()).decode()
-    
-    # HTML page that submits a form with credentials to the login URL
+    # Create a helper page that opens the login URL and provides secure credential access
     html = f'''<!DOCTYPE html>
 <html>
 <head>
 <meta charset="UTF-8">
 <title>Opening {tool_name}...</title>
 <style>
-body{{margin:0;padding:40px;font-family:system-ui,sans-serif;background:#0f172a;color:#fff;text-align:center}}
-.spinner{{width:40px;height:40px;border:3px solid #334155;border-top:3px solid #3b82f6;border-radius:50%;animation:spin 1s linear infinite;margin:20px auto}}
-@keyframes spin{{to{{transform:rotate(360deg)}}}}
+*{{box-sizing:border-box}}
+body{{margin:0;padding:20px;font-family:system-ui,-apple-system,sans-serif;background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%);color:#fff;min-height:100vh;display:flex;align-items:center;justify-content:center}}
+.container{{max-width:400px;width:100%;background:rgba(255,255,255,0.05);border-radius:16px;padding:32px;border:1px solid rgba(255,255,255,0.1);backdrop-filter:blur(10px)}}
+.logo{{font-size:24px;font-weight:700;margin-bottom:8px;background:linear-gradient(135deg,#3b82f6,#8b5cf6);-webkit-background-clip:text;-webkit-text-fill-color:transparent}}
+.subtitle{{color:#94a3b8;font-size:14px;margin-bottom:24px}}
+.tool-name{{font-size:18px;font-weight:600;color:#fff;margin-bottom:16px}}
+.field{{margin-bottom:16px}}
+.label{{font-size:12px;color:#64748b;margin-bottom:6px;display:flex;align-items:center;gap:8px}}
+.value{{background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:12px;font-family:monospace;font-size:14px;color:#e2e8f0;display:flex;align-items:center;justify-content:space-between}}
+.value span{{max-width:250px;overflow:hidden;text-overflow:ellipsis}}
+.btn{{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:12px 20px;border-radius:8px;font-size:14px;font-weight:500;cursor:pointer;transition:all 0.2s;border:none;width:100%}}
+.btn-primary{{background:linear-gradient(135deg,#3b82f6,#2563eb);color:#fff}}
+.btn-primary:hover{{transform:translateY(-1px);box-shadow:0 4px 12px rgba(59,130,246,0.4)}}
+.btn-copy{{background:rgba(255,255,255,0.1);color:#fff;padding:8px 12px;font-size:12px;width:auto}}
+.btn-copy:hover{{background:rgba(255,255,255,0.2)}}
+.copied{{background:#22c55e!important}}
+.security-note{{font-size:11px;color:#64748b;text-align:center;margin-top:20px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.1)}}
+.icon{{width:16px;height:16px}}
 </style>
 </head>
 <body>
-<div class="spinner"></div>
-<p>Opening {tool_name}...</p>
-<p style="font-size:12px;opacity:0.6">Credentials are securely managed</p>
+<div class="container">
+<div class="logo">🔐 DSG Transport</div>
+<div class="subtitle">Secure Tool Access</div>
 
-<form id="loginForm" method="POST" action="{login_url}" style="display:none">
-<input type="text" name="{username_field}" id="userField">
-<input type="password" name="{password_field}" id="passField">
-<input type="text" name="username" id="userField2">
-<input type="password" name="password" id="passField2">
-<input type="text" name="email" id="emailField">
-<input type="text" name="Email" id="EmailField">
-<input type="text" name="LOGIN_ID" id="loginIdField">
-<input type="password" name="PASSWORD" id="PASSWORDField">
-</form>
+<div class="tool-name">📱 {tool_name}</div>
+
+<div class="field">
+<div class="label">
+<svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+Username
+</div>
+<div class="value">
+<span id="user">{username}</span>
+<button class="btn btn-copy" onclick="copyText('user', this)">Copy</button>
+</div>
+</div>
+
+<div class="field">
+<div class="label">
+<svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+Password
+</div>
+<div class="value">
+<span id="pass">••••••••</span>
+<button class="btn btn-copy" onclick="copyText('pass', this)" data-pass="{password}">Copy</button>
+</div>
+</div>
+
+<button class="btn btn-primary" onclick="openTool()">
+<svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+Open {tool_name} Login Page
+</button>
+
+<div class="security-note">
+🛡️ Credentials are managed by DSG Transport.<br>
+For auto-fill, install the browser extension.
+</div>
+</div>
 
 <script>
-(function(){{
-try{{
-var d=atob("{encoded_creds}");
-var c=JSON.parse(d);
-document.getElementById("userField").value=c.u;
-document.getElementById("passField").value=c.p;
-document.getElementById("userField2").value=c.u;
-document.getElementById("passField2").value=c.p;
-document.getElementById("emailField").value=c.u;
-document.getElementById("EmailField").value=c.u;
-document.getElementById("loginIdField").value=c.u;
-document.getElementById("PASSWORDField").value=c.p;
+function copyText(id, btn) {{
+    var text = id === 'pass' ? btn.getAttribute('data-pass') : document.getElementById(id).innerText;
+    navigator.clipboard.writeText(text).then(function() {{
+        btn.classList.add('copied');
+        btn.innerText = '✓ Copied';
+        setTimeout(function() {{
+            btn.classList.remove('copied');
+            btn.innerText = 'Copy';
+        }}, 2000);
+    }});
+}}
+
+function openTool() {{
+    window.open('{login_url}', '_blank');
+}}
+
+// Auto-clear sensitive data after 5 minutes
+setTimeout(function() {{
+    document.getElementById('user').innerText = '[Expired]';
+    document.querySelectorAll('[data-pass]').forEach(function(el) {{
+        el.setAttribute('data-pass', '');
+        el.disabled = true;
+    }});
+}}, 300000);
+</script>
+</body>
+</html>'''
+    
+    return HTMLResponse(content=html)
 c=null;d=null;
 setTimeout(function(){{
 document.getElementById("loginForm").submit();
