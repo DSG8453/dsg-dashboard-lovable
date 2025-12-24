@@ -18,7 +18,7 @@ async def get_tool_credentials(tool_id: str, current_user: dict = Depends(get_cu
     async for cred in db.credentials.find({
         "user_id": current_user["id"],
         "tool_id": tool_id
-    }):
+    }).limit(100):
         credentials.append({
             "id": str(cred["_id"]),
             "tool_id": cred["tool_id"],
