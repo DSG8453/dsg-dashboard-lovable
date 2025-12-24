@@ -131,20 +131,29 @@
   }
   
   function checkAndFillCredentials() {
+    console.log('[DSG Extension] checkAndFillCredentials called on:', window.location.href);
+    
     chrome.runtime.sendMessage({ action: 'GET_PENDING_LOGIN' }, (pending) => {
       if (chrome.runtime.lastError) {
-        console.log('[DSG Extension] Error getting pending login:', chrome.runtime.lastError);
+        console.log('[DSG Extension] Error getting pending login:', chrome.runtime.lastError.message);
         hideLoadingOverlay();
         return;
       }
       
       if (!pending) {
-        console.log('[DSG Extension] No pending login for this page');
+        console.log('[DSG Extension] No pending login data found in storage');
         hideLoadingOverlay();
         return;
       }
       
-      console.log('[DSG Extension] Found pending login for:', pending.toolName);
+      console.log('[DSG Extension] Found pending login:', {
+        toolName: pending.toolName,
+        url: pending.url,
+        usernameField: pending.usernameField,
+        passwordField: pending.passwordField,
+        hasUsername: !!pending.username,
+        hasPassword: !!pending.password
+      });
       
       // Check if credentials are still fresh (< 5 minutes)
       if (Date.now() - pending.timestamp > 5 * 60 * 1000) {
