@@ -38,7 +38,7 @@ async def get_users(current_user: dict = Depends(require_admin)):
             assigned_user_ids = admin_data.get("assigned_users", [])
     
     users = []
-    async for user in db.users.find():
+    async for user in db.users.find().limit(500):
         user_id = str(user["_id"])
         
         # For Admin: only include themselves and their assigned users
