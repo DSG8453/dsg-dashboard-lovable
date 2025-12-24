@@ -284,19 +284,16 @@ export const ToolCard = ({ tool, onDelete, onUpdate }) => {
       const response = await toolsAPI.directLogin(tool.id);
       
       if (response.success) {
-        if (response.has_credentials && response.cookies && response.cookies.length > 0) {
-          // We have authenticated cookies - open tool with them
-          // Create a temporary page to set cookies and redirect
-          const cookieData = encodeURIComponent(JSON.stringify(response.cookies));
-          const targetUrl = encodeURIComponent(response.direct_url);
+        if (response.has_credentials && response.direct_url) {
+          // Server successfully logged in - open the authenticated URL
+          // The server has captured the session, now open a helper page
+          // that shows success and redirects to the logged-in tool
           
-          // Open a helper page that will set cookies and redirect
-          const helperUrl = `${process.env.REACT_APP_BACKEND_URL}/api/secure-access/open-with-cookies?cookies=${cookieData}&url=${targetUrl}`;
-          
-          window.open(helperUrl, '_blank', 'noopener');
+          const launchUrl = `${process.env.REACT_APP_BACKEND_URL}/api/secure-access/direct-launch/${tool.id}`;
+          window.open(launchUrl, '_blank', 'noopener');
           
           toast.success(`${tool.name} opened!`, {
-            description: response.cached ? "Using cached session" : "Logged in successfully",
+            description: response.cached ? "Using cached session" : "Auto-login successful",
             icon: <Shield className="h-4 w-4" />,
           });
         } else {
@@ -312,19 +309,16 @@ export const ToolCard = ({ tool, onDelete, onUpdate }) => {
     } catch (error) {
       console.error("Direct login failed:", error);
       
-      // Fallback to extension-based access
+      // Check if it's a server-side login failure - try extension
       const extensionId = localStorage.getItem('dsg_extension_id');
       if (extensionId && typeof chrome !== 'undefined' && chrome.runtime) {
-        toast.info("Trying extension-based login...");
+        toast.info("Using browser extension for login...");
         await handleExtensionAccess();
       } else {
-        // Show extension dialog as last resort
-        toast.error("Could not connect", {
-          description: error.message || "Please install the browser extension for auto-login",
-          action: {
-            label: "Install Extension",
-            onClick: () => setExtensionDialogOpen(true)
-          }
+        // Fallback to extension dialog
+        setExtensionDialogOpen(true);
+        toast.warning("Extension required", {
+          description: "Install the browser extension for seamless auto-login",
         });
       }
     } finally {
