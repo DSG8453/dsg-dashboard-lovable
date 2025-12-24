@@ -925,27 +925,6 @@ export const UsersPage = () => {
                 </p>
               )}
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Password *</Label>
-              <div className="flex gap-2">
-                <Input
-                  id="password"
-                  type="text"
-                  placeholder="Enter password"
-                  value={newUser.password}
-                  onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
-                  className="flex-1"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setNewUser({ ...newUser, password: generatePassword() })}
-                >
-                  Generate
-                </Button>
-              </div>
-              <p className="text-xs text-muted-foreground">You can share these credentials with the user via WhatsApp or copy</p>
-            </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="role">Role</Label>
