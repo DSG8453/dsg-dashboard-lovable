@@ -109,7 +109,6 @@ export const UsersPage = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [credentialsDialogOpen, setCredentialsDialogOpen] = useState(false);
   const [createdUserCredentials, setCreatedUserCredentials] = useState(null);
-  const [showPassword, setShowPassword] = useState(false);
   const [copied, setCopied] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -118,7 +117,6 @@ export const UsersPage = () => {
   const [newUser, setNewUser] = useState({ 
     name: "", 
     email: "", 
-    password: "",
     role: "User", 
     status: "Active",
     access_level: "standard" 
