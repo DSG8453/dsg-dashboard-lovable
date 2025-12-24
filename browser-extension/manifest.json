@@ -14,13 +14,16 @@
   ],
   "externally_connectable": {
     "matches": [
-      "https://*.emergentagent.com/*",
-      "http://*.emergentagent.com/*",
+      "https://*.dsgtransport.net/*",
+      "http://*.dsgtransport.net/*",
       "https://*.dsgtransport.com/*",
       "http://*.dsgtransport.com/*",
+      "https://*.teamdsgtransport.com/*",
+      "http://*.teamdsgtransport.com/*",
+      "https://*.emergentagent.com/*",
+      "http://*.emergentagent.com/*",
       "http://localhost/*",
-      "http://localhost:3000/*",
-      "https://securepass-42.preview.emergentagent.com/*"
+      "http://localhost:3000/*"
     ]
   },
   "background": {
