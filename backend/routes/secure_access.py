@@ -228,19 +228,6 @@ setTimeout(function() {{
 </html>'''
     
     return HTMLResponse(content=html)
-c=null;d=null;
-setTimeout(function(){{
-document.getElementById("loginForm").submit();
-}},500);
-}}catch(e){{
-window.location.href="{login_url}";
-}}
-}})();
-</script>
-</body>
-</html>'''
-    
-    return HTMLResponse(content=html)
 
 
 def get_error_page(title: str, message: str) -> str:
