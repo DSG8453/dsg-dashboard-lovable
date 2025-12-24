@@ -54,8 +54,6 @@ import {
   Copy,
   MessageCircle,
   Check,
-  Eye,
-  EyeOff,
   AlertTriangle,
   Wrench,
   Package,
