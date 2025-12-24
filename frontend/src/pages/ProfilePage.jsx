@@ -289,7 +289,7 @@ export const ProfilePage = ({ currentUser }) => {
           <Separator />
 
           {/* Super Admin Only: Manual Setup Section */}
-          {currentUser?.role === 'Super Admin' && (
+          {currentUser?.role === 'Super Administrator' && (
             <div className="p-4 bg-muted/30 rounded-lg border border-dashed">
               <p className="text-sm font-medium mb-3 flex items-center gap-2">
                 <Shield className="h-4 w-4 text-admin" />
