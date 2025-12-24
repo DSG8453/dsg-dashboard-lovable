@@ -114,38 +114,67 @@ export const ToolCard = ({ tool, onDelete, onUpdate }) => {
   const isSuperAdmin = user?.role === "Super Administrator";
   const hasCredentials = tool.has_credentials || (tool.credentials && (tool.credentials.username || tool.credentials.password));
 
-  // Check if extension is installed on mount
+  // Auto-detect extension on mount
   useEffect(() => {
-    checkExtensionInstalled();
+    autoDetectExtension();
   }, []);
 
-  // Check if DSG Transport extension is installed
-  const checkExtensionInstalled = async () => {
-    const extensionId = localStorage.getItem('dsg_extension_id');
-    if (!extensionId) {
+  // Auto-detect DSG Transport extension (tries known ID first, then scans)
+  const autoDetectExtension = async () => {
+    // First check saved extension ID
+    const savedId = localStorage.getItem('dsg_extension_id');
+    
+    // List of extension IDs to try (saved ID first, then user's known ID)
+    const extensionIdsToTry = [
+      savedId,
+      'hommlifemnoidmlmgmciledgnbpamgep', // User's extension ID
+    ].filter(Boolean);
+    
+    if (typeof chrome === 'undefined' || !chrome.runtime) {
       setExtensionInstalled(false);
       return;
     }
     
-    try {
-      // Try to send a message to the extension
-      if (typeof chrome !== 'undefined' && chrome.runtime) {
-        chrome.runtime.sendMessage(
-          extensionId,
-          { action: 'DSG_CHECK_EXTENSION' },
-          (response) => {
-            if (chrome.runtime.lastError) {
-              setExtensionInstalled(false);
-            } else if (response && response.installed) {
-              setExtensionInstalled(true);
+    for (const extId of extensionIdsToTry) {
+      try {
+        const isInstalled = await new Promise((resolve) => {
+          const timeout = setTimeout(() => resolve(false), 1000);
+          
+          chrome.runtime.sendMessage(
+            extId,
+            { action: 'DSG_CHECK_EXTENSION' },
+            (response) => {
+              clearTimeout(timeout);
+              if (chrome.runtime.lastError) {
+                resolve(false);
+              } else if (response && response.installed) {
+                // Auto-save this extension ID
+                if (extId !== savedId) {
+                  localStorage.setItem('dsg_extension_id', extId);
+                  console.log('[DSG] Auto-detected extension:', extId);
+                }
+                resolve(true);
+              } else {
+                resolve(false);
+              }
             }
-          }
-        );
+          );
+        });
+        
+        if (isInstalled) {
+          setExtensionInstalled(true);
+          return;
+        }
+      } catch (err) {
+        console.log('[DSG] Extension check failed for:', extId);
       }
-    } catch (err) {
-      setExtensionInstalled(false);
     }
+    
+    setExtensionInstalled(false);
   };
+
+  // Legacy check function (kept for compatibility)
+  const checkExtensionInstalled = autoDetectExtension;
 
   // Handle secure tool access via browser extension
   const handleExtensionAccess = async () => {
