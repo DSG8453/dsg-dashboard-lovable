@@ -270,15 +270,65 @@ export const ToolCard = ({ tool, onDelete, onUpdate }) => {
     }
   };
 
-  // Main access handler - tries extension first, falls back to direct
+  // Main access handler - Direct login (Bitwarden-style)
   const handleToolAccess = async () => {
-    const extensionId = localStorage.getItem('dsg_extension_id');
+    setIsAccessingTool(true);
     
-    if (extensionId && typeof chrome !== 'undefined' && chrome.runtime) {
-      await handleExtensionAccess();
-    } else {
-      // No extension - show installation dialog
-      setExtensionDialogOpen(true);
+    try {
+      // Try direct login first (server logs in, user gets pre-authenticated session)
+      toast.info(`Connecting to ${tool.name}...`, {
+        description: "Preparing secure access",
+        icon: <Shield className="h-4 w-4" />,
+      });
+      
+      const response = await toolsAPI.directLogin(tool.id);
+      
+      if (response.success) {
+        if (response.has_credentials && response.cookies && response.cookies.length > 0) {
+          // We have authenticated cookies - open tool with them
+          // Create a temporary page to set cookies and redirect
+          const cookieData = encodeURIComponent(JSON.stringify(response.cookies));
+          const targetUrl = encodeURIComponent(response.direct_url);
+          
+          // Open a helper page that will set cookies and redirect
+          const helperUrl = `${process.env.REACT_APP_BACKEND_URL}/api/secure-access/open-with-cookies?cookies=${cookieData}&url=${targetUrl}`;
+          
+          window.open(helperUrl, '_blank', 'noopener');
+          
+          toast.success(`${tool.name} opened!`, {
+            description: response.cached ? "Using cached session" : "Logged in successfully",
+            icon: <Shield className="h-4 w-4" />,
+          });
+        } else {
+          // No credentials - open directly
+          window.open(response.direct_url || tool.url, '_blank', 'noopener');
+          toast.info(`${tool.name} opened`, {
+            description: "Please login manually (no credentials configured)",
+          });
+        }
+      } else {
+        throw new Error(response.error || "Failed to access tool");
+      }
+    } catch (error) {
+      console.error("Direct login failed:", error);
+      
+      // Fallback to extension-based access
+      const extensionId = localStorage.getItem('dsg_extension_id');
+      if (extensionId && typeof chrome !== 'undefined' && chrome.runtime) {
+        toast.info("Trying extension-based login...");
+        await handleExtensionAccess();
+      } else {
+        // Show extension dialog as last resort
+        toast.error("Could not connect", {
+          description: error.message || "Please install the browser extension for auto-login",
+          action: {
+            label: "Install Extension",
+            onClick: () => setExtensionDialogOpen(true)
+          }
+        });
+      }
+    } finally {
+      setIsAccessingTool(false);
     }
   };
 
