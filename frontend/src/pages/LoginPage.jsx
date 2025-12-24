@@ -38,7 +38,7 @@ export const LoginPage = () => {
           {/* Google Button - Light blue */}
           <Button
             variant="outline"
-            className="w-full h-12 gap-3 text-base font-medium rounded-lg bg-[#e0f2fe] hover:bg-[#bae6fd] text-gray-700 border border-gray-200"
+            className="w-full h-12 gap-3 text-base font-medium rounded-lg bg-[#bae6fd] hover:bg-[#7dd3fc] text-gray-700 border border-gray-200"
             onClick={handleGoogleLogin}
             disabled={isLoading}
           >
