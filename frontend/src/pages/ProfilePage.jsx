@@ -185,6 +185,120 @@ export const ProfilePage = ({ currentUser }) => {
           </div>
         </CardContent>
       </Card>
+
+      {/* Browser Extension Section */}
+      <Card className="border-2 border-border/50 shadow-lg mt-6">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Puzzle className="h-5 w-5 text-primary" />
+            Browser Extension
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Install the DSG Transport browser extension for <strong>automatic login</strong> to tools. 
+            You won't need to enter passwords - credentials are filled automatically and securely.
+          </p>
+
+          {/* Download Button */}
+          <Button
+            variant="outline"
+            className="w-full gap-2"
+            onClick={handleDownloadExtension}
+          >
+            <Download className="h-4 w-4" />
+            Download Extension
+            <ExternalLink className="h-3 w-3 ml-1" />
+          </Button>
+
+          <Separator />
+
+          {/* Extension ID Input */}
+          <div className="space-y-2">
+            <Label htmlFor="extensionId" className="text-sm font-medium">
+              Extension ID
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              After installing, go to <code className="bg-muted px-1 rounded">chrome://extensions</code> and copy your extension ID
+            </p>
+            <div className="flex gap-2">
+              <Input
+                id="extensionId"
+                placeholder="e.g., abcdefghijklmnopqrstuvwxyz..."
+                value={extensionId}
+                onChange={(e) => {
+                  setExtensionId(e.target.value);
+                  setIsExtensionSaved(false);
+                }}
+                className="flex-1"
+              />
+              {extensionId && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={copyExtensionId}
+                  title="Copy ID"
+                >
+                  <Copy className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {/* Save / Clear Buttons */}
+          <div className="flex gap-2">
+            <Button
+              variant={isExtensionSaved ? "outline" : "gradient"}
+              className="flex-1 gap-2"
+              onClick={handleSaveExtensionId}
+              disabled={!extensionId.trim() || isExtensionSaved}
+            >
+              {isExtensionSaved ? (
+                <>
+                  <Check className="h-4 w-4 text-success" />
+                  Saved
+                </>
+              ) : (
+                "Save Extension ID"
+              )}
+            </Button>
+            {isExtensionSaved && (
+              <Button
+                variant="destructive"
+                onClick={handleClearExtensionId}
+              >
+                Remove
+              </Button>
+            )}
+          </div>
+
+          {/* Status */}
+          {isExtensionSaved && (
+            <div className="p-3 rounded-lg bg-success/10 border border-success/20">
+              <p className="text-sm text-success font-medium flex items-center gap-2">
+                <Check className="h-4 w-4" />
+                Extension Connected
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Auto-login is enabled. Click "Open Tool" on any tool to login automatically.
+              </p>
+            </div>
+          )}
+
+          {/* Instructions */}
+          <div className="p-3 rounded-lg bg-muted/50 text-xs space-y-2">
+            <p className="font-medium">How to install:</p>
+            <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
+              <li>Click "Download Extension" above</li>
+              <li>Extract the ZIP file to a folder</li>
+              <li>Open Chrome → <code className="bg-muted px-1 rounded">chrome://extensions</code></li>
+              <li>Enable "Developer mode" (top-right toggle)</li>
+              <li>Click "Load unpacked" → Select the folder</li>
+              <li>Copy the Extension ID and paste it above</li>
+            </ol>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 };
