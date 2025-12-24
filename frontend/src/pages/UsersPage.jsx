@@ -369,33 +369,34 @@ export const UsersPage = () => {
 
   const copyCredentials = async () => {
     if (!createdUserCredentials) return;
-    const text = `DSG Transport Portal Login\n\nEmail: ${createdUserCredentials.email}\nPassword: ${createdUserCredentials.password}\n\nLogin at: ${window.location.origin}`;
-    
+    const text = `DSG Transport Portal Access\n\nHello ${createdUserCredentials.name},\n\nYou've been invited to access the DSG Transport portal.\n\n🔗 Login: ${window.location.origin}\n\nClick "Continue with Google" and sign in with your company Google account (${createdUserCredentials.email}).\n\n- DSG Transport LLC`;
     try {
-      if (navigator.clipboard && window.isSecureContext) {
-        await navigator.clipboard.writeText(text);
-      } else {
-        // Fallback
-        const textArea = document.createElement("textarea");
-        textArea.value = text;
-        textArea.style.position = "fixed";
-        textArea.style.left = "-999999px";
-        document.body.appendChild(textArea);
-        textArea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textArea);
-      }
+      await navigator.clipboard.writeText(text);
       setCopied(true);
-      toast.success("Credentials copied to clipboard!");
+      toast.success("Invitation copied to clipboard!");
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
-      toast.info("Copy manually: " + createdUserCredentials.email, { duration: 5000 });
+      // Fallback for older browsers
+      const textArea = document.createElement("textarea");
+      textArea.value = text;
+      document.body.appendChild(textArea);
+      textArea.select();
+      try {
+        document.execCommand("copy");
+        setCopied(true);
+        toast.success("Invitation copied to clipboard!");
+        setTimeout(() => setCopied(false), 2000);
+      } catch (e) {
+        toast.info("Copy the portal link: " + window.location.origin, { duration: 5000 });
+      } finally {
+        document.body.removeChild(textArea);
+      }
     }
   };
 
   const shareViaWhatsApp = () => {
     if (!createdUserCredentials) return;
-    const message = `🚚 *DSG Transport Portal Login*\n\nHello ${createdUserCredentials.name},\n\nYour account has been created!\n\n📧 Email: ${createdUserCredentials.email}\n🔑 Password: ${createdUserCredentials.password}\n\n🔗 Login at: ${window.location.origin}\n\nPlease change your password after first login.`;
+    const message = `🚚 *DSG Transport Portal Invitation*\n\nHello ${createdUserCredentials.name},\n\nYou've been invited to access the DSG Transport portal!\n\n🔗 *Login:* ${window.location.origin}\n\n✅ Click "Continue with Google" and sign in with your company Google account (${createdUserCredentials.email}).\n\n- DSG Transport LLC`;
     const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
     window.open(whatsappUrl, "_blank");
   };
