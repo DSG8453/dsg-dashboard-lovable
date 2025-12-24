@@ -178,7 +178,41 @@ export const ToolCard = ({ tool, onDelete, onUpdate }) => {
 
   // Handle secure tool access via browser extension
   const handleExtensionAccess = async () => {
-    const extensionId = localStorage.getItem('dsg_extension_id');
+    let extensionId = localStorage.getItem('dsg_extension_id');
+    
+    // Try auto-detect if no extension ID saved
+    if (!extensionId) {
+      // Try the known extension ID
+      const knownId = 'hommlifemnoidmlmgmciledgnbpamgep';
+      
+      if (typeof chrome !== 'undefined' && chrome.runtime) {
+        try {
+          const detected = await new Promise((resolve) => {
+            const timeout = setTimeout(() => resolve(false), 1500);
+            chrome.runtime.sendMessage(
+              knownId,
+              { action: 'DSG_CHECK_EXTENSION' },
+              (response) => {
+                clearTimeout(timeout);
+                if (!chrome.runtime.lastError && response?.installed) {
+                  localStorage.setItem('dsg_extension_id', knownId);
+                  resolve(knownId);
+                } else {
+                  resolve(false);
+                }
+              }
+            );
+          });
+          
+          if (detected) {
+            extensionId = detected;
+            toast.success("Extension detected!", {
+              description: "Auto-login is now available",
+            });
+          }
+        } catch (e) {}
+      }
+    }
     
     if (!extensionId) {
       // Show extension installation dialog
