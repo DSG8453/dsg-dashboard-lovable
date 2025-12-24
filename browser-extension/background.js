@@ -100,8 +100,8 @@ async function handleSecureLogin(request, sendResponse) {
     console.log('[DSG Extension] Login URL:', request.loginUrl);
     console.log('[DSG Extension] Has encrypted payload:', !!request.encryptedPayload);
     
-    // Get the decryption from backend
-    const backendUrl = getBackendUrl();
+    // Get the backend URL dynamically (captured from sender origin)
+    const backendUrl = getDynamicBackendUrl();
     console.log('[DSG Extension] Calling decrypt API at:', backendUrl);
     
     const decryptResponse = await fetch(backendUrl + '/api/secure-access/decrypt-payload', {
