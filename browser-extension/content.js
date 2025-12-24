@@ -381,11 +381,12 @@
   
   function retryFillCredentials(creds, attempt) {
     const maxAttempts = 5;
-    const delay = attempt * 1500; // Increasing delay
+    const delay = attempt * 1000; // Increasing delay
     
     if (attempt > maxAttempts) {
       console.log('[DSG Extension] Max retries reached, showing manual login notice');
       showNotification('⚠️ Could not auto-fill. Please login manually.', 'warning');
+      hideLoadingOverlay();
       chrome.runtime.sendMessage({ 
         action: 'LOGIN_FAILED', 
         reason: 'Could not find login fields',
@@ -405,9 +406,22 @@
         fillField(usernameInput, creds.username);
         setTimeout(() => {
           fillField(passwordInput, creds.password);
-          showNotification('✅ Credentials filled by DSG Transport', 'success');
+          
           chrome.runtime.sendMessage({ action: 'CLEAR_PENDING_LOGIN' });
-          chrome.runtime.sendMessage({ action: 'LOGIN_SUCCESS', toolName: creds.toolName });
+          
+          // Auto-click login button
+          setTimeout(() => {
+            const loginButton = findLoginButton();
+            if (loginButton) {
+              console.log('[DSG Extension] Clicking login button on retry...');
+              loginButton.click();
+              setTimeout(hideLoadingOverlay, 1500);
+            } else {
+              showNotification('✅ Credentials filled - Click login to continue', 'success');
+              hideLoadingOverlay();
+            }
+            chrome.runtime.sendMessage({ action: 'LOGIN_SUCCESS', toolName: creds.toolName });
+          }, 300);
         }, 200);
       } else {
         console.log(`[DSG Extension] Retry ${attempt}/${maxAttempts}...`);
