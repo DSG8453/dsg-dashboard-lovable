@@ -422,3 +422,88 @@ async def direct_tool_login(
         "message": "For seamless login, use the browser extension. The extension will auto-fill credentials."
     }
 
+
+@router.get("/direct-launch/{tool_id}")
+async def direct_launch_tool(tool_id: str):
+    """
+    Direct launch endpoint - Opens a page that helps users access the tool.
+    Shows extension requirement message and provides tool access.
+    """
+    db = await get_db()
+    
+    try:
+        obj_id = ObjectId(tool_id)
+    except Exception:
+        return HTMLResponse(content=get_error_page("Invalid Tool", "Tool ID is invalid."), status_code=400)
+    
+    tool = await db.tools.find_one({"_id": obj_id})
+    if not tool:
+        return HTMLResponse(content=get_error_page("Tool Not Found", "The requested tool was not found."), status_code=404)
+    
+    credentials = tool.get("credentials", {})
+    login_url = credentials.get("login_url") or tool.get("url", "#")
+    tool_name = tool.get("name", "Tool")
+    has_credentials = bool(credentials.get("username"))
+    
+    # Show extension requirement page
+    html = f'''<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>{tool_name} - DSG Transport</title>
+<style>
+*{{box-sizing:border-box}}
+body{{margin:0;padding:20px;font-family:system-ui,-apple-system,sans-serif;background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%);color:#fff;min-height:100vh;display:flex;align-items:center;justify-content:center}}
+.container{{max-width:450px;width:100%;background:rgba(255,255,255,0.05);border-radius:16px;padding:32px;border:1px solid rgba(255,255,255,0.1);text-align:center}}
+.logo{{font-size:24px;font-weight:700;margin-bottom:8px;background:linear-gradient(135deg,#3b82f6,#8b5cf6);-webkit-background-clip:text;-webkit-text-fill-color:transparent}}
+.tool-name{{font-size:20px;font-weight:600;color:#fff;margin:20px 0}}
+.message{{color:#94a3b8;font-size:14px;line-height:1.6;margin-bottom:24px}}
+.btn{{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:14px 24px;border-radius:8px;font-size:14px;font-weight:500;cursor:pointer;transition:all 0.2s;border:none;text-decoration:none}}
+.btn-primary{{background:linear-gradient(135deg,#3b82f6,#2563eb);color:#fff;width:100%;margin-bottom:12px}}
+.btn-primary:hover{{transform:translateY(-1px);box-shadow:0 4px 12px rgba(59,130,246,0.4)}}
+.btn-secondary{{background:rgba(255,255,255,0.1);color:#fff;width:100%}}
+.btn-secondary:hover{{background:rgba(255,255,255,0.15)}}
+.extension-box{{background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.3);border-radius:12px;padding:20px;margin:20px 0}}
+.extension-box h3{{color:#22c55e;margin:0 0 8px 0;font-size:16px}}
+.extension-box p{{color:#94a3b8;margin:0;font-size:13px}}
+.warning{{background:rgba(234,179,8,0.1);border:1px solid rgba(234,179,8,0.3);border-radius:8px;padding:12px;margin-top:16px;font-size:12px;color:#eab308}}
+.icon{{width:48px;height:48px;margin:0 auto 16px}}
+.spinner{{width:24px;height:24px;border:3px solid rgba(255,255,255,0.2);border-top-color:#3b82f6;border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 16px}}
+@keyframes spin{{to{{transform:rotate(360deg)}}}}
+</style>
+</head>
+<body>
+<div class="container">
+<div class="logo">🔐 DSG Transport</div>
+
+<div class="spinner"></div>
+
+<div class="tool-name">📱 {tool_name}</div>
+
+<div class="message">
+{"This tool has <strong>secure credentials</strong> managed by DSG Transport." if has_credentials else "Opening " + tool_name + "..."}
+</div>
+
+<a href="{login_url}" class="btn btn-primary" id="openBtn">
+Open {tool_name}
+</a>
+
+{"<div class='extension-box'><h3>🧩 For Auto-Login</h3><p>Install the browser extension from your Profile page for automatic credential filling.</p></div>" if has_credentials else ""}
+
+<a href="/" class="btn btn-secondary">
+← Return to Dashboard
+</a>
+
+</div>
+
+<script>
+// Auto-open the tool after a short delay
+setTimeout(function() {{
+    window.open("{login_url}", "_blank");
+}}, 1500);
+</script>
+</body>
+</html>'''
+    
+    return HTMLResponse(content=html)
+
