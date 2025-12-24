@@ -142,16 +142,6 @@ export const UsersPage = () => {
   // Check if current email is external (non-approved domain)
   const isExternalEmail = newUser.email && newUser.email.includes("@") && !isApprovedDomain(newUser.email);
 
-  // Generate random password
-  const generatePassword = () => {
-    const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%";
-    let password = "";
-    for (let i = 0; i < 12; i++) {
-      password += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return password;
-  };
-
   // Fetch users on mount
   useEffect(() => {
     fetchUsers();
