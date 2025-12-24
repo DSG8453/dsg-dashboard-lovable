@@ -150,6 +150,7 @@ export const Navbar = ({ currentUser }) => {
                   variant={isActive ? "navActive" : "nav"}
                   size="sm"
                   className="gap-2 relative"
+                  onClick={(e) => e.stopPropagation()}
                 >
                   <TicketIcon className="h-4 w-4" />
                   <span className="hidden xl:inline">
@@ -158,7 +159,7 @@ export const Navbar = ({ currentUser }) => {
                   {openIssuesCount > 0 && (
                     <Badge 
                       variant="destructive" 
-                      className="absolute -top-1 -right-1 h-5 w-5 p-0 flex items-center justify-center text-xs"
+                      className="absolute -top-1 -right-1 h-5 w-5 p-0 flex items-center justify-center text-xs pointer-events-none"
                     >
                       {openIssuesCount}
                     </Badge>
@@ -175,6 +176,7 @@ export const Navbar = ({ currentUser }) => {
                     variant={isActive ? "navActive" : "nav"}
                     size="sm"
                     className="gap-2"
+                    onClick={(e) => e.stopPropagation()}
                   >
                     <HeadphonesIcon className="h-4 w-4" />
                     <span className="hidden xl:inline">Support</span>
