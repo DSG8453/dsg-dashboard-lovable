@@ -220,10 +220,37 @@ async function handleAutoLogin(request, sendResponse) {
   }
 }
 
-// Get backend URL from storage or default
+// Get backend URL dynamically from the page that triggered the login
+// This makes the extension work with ANY deployment domain
 function getBackendUrl() {
-  // This should match the dashboard URL
-  return 'https://securepass-42.preview.emergentagent.com';
+  // Check if we have a stored backend URL from the last dashboard interaction
+  // The dashboard sends its origin when communicating with the extension
+  // Default fallback URLs in priority order
+  const fallbackUrls = [
+    'https://secure.dsgtransport.net',
+    'https://app.dsgtransport.net', 
+    'https://portal.dsgtransport.net',
+    'https://secure.dsgtransport.com',
+    'https://app.dsgtransport.com',
+    'https://securepass-42.preview.emergentagent.com'
+  ];
+  
+  // Return the first fallback (will be overridden by dynamic detection)
+  return fallbackUrls[fallbackUrls.length - 1]; // Use preview URL as default for now
+}
+
+// Store the backend URL when we receive a message from the dashboard
+let dynamicBackendUrl = null;
+
+function setBackendUrl(url) {
+  if (url && (url.includes('dsgtransport') || url.includes('emergentagent'))) {
+    dynamicBackendUrl = url.replace(/\/$/, ''); // Remove trailing slash
+    console.log('[DSG Extension] Backend URL set to:', dynamicBackendUrl);
+  }
+}
+
+function getDynamicBackendUrl() {
+  return dynamicBackendUrl || getBackendUrl();
 }
 
 // Check if two URLs match (same domain or URL contains pending URL domain)
