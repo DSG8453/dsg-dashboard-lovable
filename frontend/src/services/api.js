@@ -59,6 +59,25 @@ export const authAPI = {
   getMe: () => fetchAPI('/api/auth/me'),
   
   logout: () => fetchAPI('/api/auth/logout', { method: 'POST' }),
+
+  // Password management
+  forgotPassword: (email) =>
+    fetchAPI('/api/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    }),
+  
+  resetPassword: (token, newPassword) =>
+    fetchAPI('/api/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ token, new_password: newPassword }),
+    }),
+  
+  changePassword: (currentPassword, newPassword) =>
+    fetchAPI('/api/auth/change-password', {
+      method: 'POST',
+      body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+    }),
 };
 
 // Users API
