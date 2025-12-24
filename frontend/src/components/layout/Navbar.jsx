@@ -125,10 +125,18 @@ export const Navbar = ({ currentUser }) => {
                   <Button
                     variant={isActive ? "navActive" : "nav"}
                     size="sm"
-                    className="gap-2"
+                    className={`gap-2 ${item.name === "Devices" ? "relative" : ""}`}
                   >
                     <item.icon className="h-4 w-4" />
                     <span className="hidden xl:inline">{item.name}</span>
+                    {item.name === "Devices" && pendingDevicesCount > 0 && (
+                      <Badge 
+                        variant="warning" 
+                        className="absolute -top-1 -right-1 h-5 w-5 p-0 flex items-center justify-center text-xs bg-yellow-500 text-black"
+                      >
+                        {pendingDevicesCount}
+                      </Badge>
+                    )}
                   </Button>
                 )}
               </NavLink>
