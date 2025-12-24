@@ -275,8 +275,8 @@ export const ToolCard = ({ tool, onDelete, onUpdate }) => {
     setIsAccessingTool(true);
     
     try {
-      // Try direct login first (server logs in, user gets pre-authenticated session)
-      toast.info(`Connecting to ${tool.name}...`, {
+      // Try direct login first
+      toast.info(`Opening ${tool.name}...`, {
         description: "Preparing secure access",
         icon: <Shield className="h-4 w-4" />,
       });
@@ -284,24 +284,27 @@ export const ToolCard = ({ tool, onDelete, onUpdate }) => {
       const response = await toolsAPI.directLogin(tool.id);
       
       if (response.success) {
-        if (response.has_credentials && response.direct_url) {
-          // Server successfully logged in - open the authenticated URL
-          // The server has captured the session, now open a helper page
-          // that shows success and redirects to the logged-in tool
-          
-          const launchUrl = `${process.env.REACT_APP_BACKEND_URL}/api/secure-access/direct-launch/${tool.id}`;
-          window.open(launchUrl, '_blank', 'noopener');
-          
-          toast.success(`${tool.name} opened!`, {
-            description: response.cached ? "Using cached session" : "Auto-login successful",
-            icon: <Shield className="h-4 w-4" />,
-          });
+        // Check if user has extension installed
+        const extensionId = localStorage.getItem('dsg_extension_id');
+        
+        if (extensionId && typeof chrome !== 'undefined' && chrome.runtime) {
+          // Use extension for auto-fill
+          await handleExtensionAccess();
         } else {
-          // No credentials - open directly
-          window.open(response.direct_url || tool.url, '_blank', 'noopener');
-          toast.info(`${tool.name} opened`, {
-            description: "Please login manually (no credentials configured)",
-          });
+          // No extension - open tool directly (user will login manually)
+          const toolUrl = response.direct_url || tool.url;
+          window.open(toolUrl, '_blank', 'noopener');
+          
+          if (response.has_credentials) {
+            toast.success(`${tool.name} opened!`, {
+              description: "Install browser extension from Profile for auto-login",
+              icon: <Shield className="h-4 w-4" />,
+            });
+          } else {
+            toast.info(`${tool.name} opened`, {
+              description: "Please login manually",
+            });
+          }
         }
       } else {
         throw new Error(response.error || "Failed to access tool");
@@ -309,16 +312,16 @@ export const ToolCard = ({ tool, onDelete, onUpdate }) => {
     } catch (error) {
       console.error("Direct login failed:", error);
       
-      // Check if it's a server-side login failure - try extension
-      const extensionId = localStorage.getItem('dsg_extension_id');
-      if (extensionId && typeof chrome !== 'undefined' && chrome.runtime) {
-        toast.info("Using browser extension for login...");
-        await handleExtensionAccess();
+      // Fallback - just open the tool URL directly
+      const toolUrl = tool.credentials?.login_url || tool.url;
+      if (toolUrl) {
+        window.open(toolUrl, '_blank', 'noopener');
+        toast.info(`${tool.name} opened`, {
+          description: "Please login manually",
+        });
       } else {
-        // Fallback to extension dialog
-        setExtensionDialogOpen(true);
-        toast.warning("Extension required", {
-          description: "Install the browser extension for seamless auto-login",
+        toast.error("Failed to open tool", {
+          description: error.message || "Please contact Super Admin",
         });
       }
     } finally {
