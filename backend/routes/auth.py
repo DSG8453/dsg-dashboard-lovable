@@ -23,6 +23,9 @@ class InitiateLoginRequest(BaseModel):
     email: str
     password: str
 
+class CheckPasswordAccessRequest(BaseModel):
+    email: str
+
 # Generate 6-digit OTP
 def generate_otp():
     return ''.join(random.choices(string.digits, k=6))
