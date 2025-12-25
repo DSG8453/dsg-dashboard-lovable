@@ -184,6 +184,51 @@ export const CredentialsPage = () => {
     }
   };
 
+  // Toggle Password Login
+  const handleTogglePasswordLogin = async (userItem, enabled) => {
+    if (enabled) {
+      // If enabling, first ask for password
+      setSelectedUser(userItem);
+      setNewPassword("");
+      setPasswordLoginDialogOpen(true);
+    } else {
+      // If disabling, just toggle off
+      try {
+        await usersAPI.togglePasswordLogin(userItem.id, false);
+        setUsers(users.map(u => 
+          u.id === userItem.id ? { ...u, password_login_enabled: false } : u
+        ));
+        toast.success(`Password login disabled for ${userItem.name}`);
+      } catch (error) {
+        toast.error(`Failed to update password login: ${error.message}`);
+      }
+    }
+  };
+
+  // Enable password login with password
+  const handleEnablePasswordLogin = async () => {
+    if (!selectedUser || !newPassword) {
+      toast.error("Please enter a password for the user");
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await usersAPI.setUserPassword(selectedUser.id, newPassword);
+      setUsers(users.map(u => 
+        u.id === selectedUser.id ? { ...u, password_login_enabled: true, password: newPassword } : u
+      ));
+      toast.success(`Password login enabled for ${selectedUser.name}`);
+      setPasswordLoginDialogOpen(false);
+      setNewPassword("");
+      setSelectedUser(null);
+    } catch (error) {
+      toast.error(`Failed to enable password login: ${error.message}`);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   // Delete user
   const handleDeleteUser = async () => {
     if (!selectedUser) return;
