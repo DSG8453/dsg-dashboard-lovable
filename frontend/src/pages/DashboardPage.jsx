@@ -125,19 +125,17 @@ export const DashboardPage = ({ currentUser }) => {
         // Admin and User only see ASSIGNED tools
         if (!isSuperAdmin && user) {
           try {
+            console.log("Fetching tool access for user:", user.id, user.role);
             const accessData = await usersAPI.getToolAccess(user.id);
             const allowedToolIds = accessData.allowed_tools || [];
+            console.log("Allowed tool IDs:", allowedToolIds);
             
-            // Filter to only show assigned tools
-            if (allowedToolIds.length > 0) {
-              toolsWithIcons = toolsWithIcons.filter(tool => allowedToolIds.includes(tool.id));
-            } else {
-              // If no tools assigned, show empty
-              toolsWithIcons = [];
-            }
-          } catch {
+            // Filter to only show assigned tools - even if 0 tools assigned
+            toolsWithIcons = toolsWithIcons.filter(tool => allowedToolIds.includes(tool.id));
+            console.log("Filtered tools count:", toolsWithIcons.length);
+          } catch (error) {
             // If can't fetch access, show no tools for safety
-            console.log("Could not fetch tool access");
+            console.error("Could not fetch tool access:", error);
             toolsWithIcons = [];
           }
         }
