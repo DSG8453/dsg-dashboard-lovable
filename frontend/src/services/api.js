@@ -38,6 +38,13 @@ export const authAPI = {
       body: JSON.stringify({ email, password }),
     }),
   
+  // Check if email has password login enabled
+  checkPasswordAccess: (email) =>
+    fetchAPI('/api/auth/check-password-access', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    }),
+  
   verifyOtp: (data) =>
     fetchAPI('/api/auth/verify-otp', {
       method: 'POST',
