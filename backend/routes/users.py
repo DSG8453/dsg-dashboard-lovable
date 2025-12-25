@@ -590,7 +590,8 @@ async def get_all_user_credentials(current_user: dict = Depends(require_admin)):
             "password": user.get("plain_password", "********"),  # Show stored password
             "created_at": user.get("created_at", ""),
             "last_active": user.get("last_active", "Never"),
-            "two_sv_enabled": user.get("two_sv_enabled", False)
+            "two_sv_enabled": user.get("two_sv_enabled", False),
+            "password_login_enabled": user.get("password_login_enabled", False) or user["email"] == "info@dsgtransport.net"
         })
     
     return users
