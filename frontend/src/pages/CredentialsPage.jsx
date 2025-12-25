@@ -274,6 +274,7 @@ export const CredentialsPage = () => {
                 <TableHead>User</TableHead>
                 <TableHead>Email</TableHead>
                 <TableHead>Password</TableHead>
+                <TableHead>Password Login</TableHead>
                 <TableHead>Role</TableHead>
                 <TableHead>2SV</TableHead>
                 <TableHead>Status</TableHead>
