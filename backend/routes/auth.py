@@ -42,31 +42,78 @@ def create_temp_token(user_id: str, email: str):
     # Short-lived token for OTP verification (5 minutes)
     return create_access_token(token_data, expires_delta=timedelta(minutes=5))
 
+@router.post("/check-password-access")
+async def check_password_access(request: CheckPasswordAccessRequest):
+    """
+    Check if an email has password login enabled.
+    Returns whether the user can use email/password login.
+    """
+    db = await get_db()
+    
+    email = request.email.lower().strip()
+    
+    # Find user by email
+    user = await db.users.find_one({"email": email})
+    
+    if not user:
+        # Don't reveal if user exists or not for security
+        return {
+            "password_login_enabled": False,
+            "message": "Please use Google SSO to login"
+        }
+    
+    # Super Admin always has password login enabled
+    SUPER_ADMIN_EMAIL = "info@dsgtransport.net"
+    if email == SUPER_ADMIN_EMAIL:
+        return {
+            "password_login_enabled": True,
+            "message": "Password login available"
+        }
+    
+    # Check if password login is enabled for this user
+    password_login_enabled = user.get("password_login_enabled", False)
+    
+    if password_login_enabled:
+        return {
+            "password_login_enabled": True,
+            "message": "Password login available"
+        }
+    else:
+        return {
+            "password_login_enabled": False,
+            "message": "Please use Google SSO to login"
+        }
+
 @router.post("/login")
 async def login(request: LoginRequest):
     """
-    Login flow for Super Admin only (email/password):
-    1. Only info@dsgtransport.net can use email/password login
-    2. Other users must use Google SSO
+    Login flow for users with password login enabled:
+    1. Super Admin (info@dsgtransport.net) always has password login
+    2. Other users need password_login_enabled = true (set by Super Admin)
     3. If user has 2SV enabled -> return temp_token and send OTP
     4. If user doesn't have 2SV enabled -> return access_token directly
     """
     db = await get_db()
     
-    # SUPER ADMIN ONLY: Restrict email/password login to Super Admin
+    email = request.email.lower().strip()
     SUPER_ADMIN_EMAIL = "info@dsgtransport.net"
-    if request.email.lower() != SUPER_ADMIN_EMAIL:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Email/password login is only available for Super Admin. Please use Google SSO."
-        )
     
     # Find user by email
-    user = await db.users.find_one({"email": request.email.lower()})
+    user = await db.users.find_one({"email": email})
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password"
+        )
+    
+    # Check if password login is allowed for this user
+    is_super_admin = email == SUPER_ADMIN_EMAIL
+    password_login_enabled = user.get("password_login_enabled", False)
+    
+    if not is_super_admin and not password_login_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Password login not enabled for this account. Please use Google SSO or contact your administrator."
         )
     
     # Verify password
@@ -85,10 +132,6 @@ async def login(request: LoginRequest):
     
     # Check if 2SV is enabled for this user
     two_sv_enabled = user.get("two_sv_enabled", False)
-    
-    # Super Admin 2SV temporarily disabled for testing
-    # if user.get("role") == "Super Administrator":
-    #     two_sv_enabled = True
     
     if two_sv_enabled:
         # Generate OTP and send email
