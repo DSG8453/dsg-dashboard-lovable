@@ -332,6 +332,21 @@ export const CredentialsPage = () => {
                     </div>
                   </TableCell>
                   <TableCell>
+                    <div className="flex items-center gap-2">
+                      {userItem.email === "info@dsgtransport.net" ? (
+                        <Badge variant="success" className="gap-1">
+                          <Shield className="h-3 w-3" />
+                          Always On
+                        </Badge>
+                      ) : (
+                        <Switch
+                          checked={userItem.password_login_enabled}
+                          onCheckedChange={(checked) => handleTogglePasswordLogin(userItem, checked)}
+                        />
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell>
                     <Badge variant={
                       userItem.role === "Super Administrator" ? "admin" :
                       userItem.role === "Administrator" ? "admin" : "user"
