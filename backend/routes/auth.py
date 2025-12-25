@@ -42,11 +42,21 @@ def create_temp_token(user_id: str, email: str):
 @router.post("/login")
 async def login(request: LoginRequest):
     """
-    Login flow:
-    1. If user has 2SV enabled -> return temp_token and send OTP
-    2. If user doesn't have 2SV enabled -> return access_token directly
+    Login flow for Super Admin only (email/password):
+    1. Only info@dsgtransport.net can use email/password login
+    2. Other users must use Google SSO
+    3. If user has 2SV enabled -> return temp_token and send OTP
+    4. If user doesn't have 2SV enabled -> return access_token directly
     """
     db = await get_db()
+    
+    # SUPER ADMIN ONLY: Restrict email/password login to Super Admin
+    SUPER_ADMIN_EMAIL = "info@dsgtransport.net"
+    if request.email.lower() != SUPER_ADMIN_EMAIL:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Email/password login is only available for Super Admin. Please use Google SSO."
+        )
     
     # Find user by email
     user = await db.users.find_one({"email": request.email.lower()})
@@ -57,7 +67,7 @@ async def login(request: LoginRequest):
         )
     
     # Verify password
-    if not verify_password(request.password, user["password"]):
+    if not user.get("password") or not verify_password(request.password, user["password"]):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password"
