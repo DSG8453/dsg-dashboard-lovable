@@ -811,3 +811,112 @@ async def change_user_role(
         "new_role": new_role
     }
 
+
+
+# ============ PASSWORD LOGIN ACCESS (Super Admin only) ============
+
+class SetPasswordRequest(BaseModel):
+    password: str
+
+@router.put("/{user_id}/toggle-password-login")
+async def toggle_password_login(
+    user_id: str,
+    enabled: bool,
+    current_user: dict = Depends(require_admin)
+):
+    """Enable/disable password login for a user (Super Admin only)"""
+    db = await get_db()
+    
+    # Only Super Admin can toggle password login
+    if current_user["role"] != "Super Administrator":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only Super Administrator can modify password login settings"
+        )
+    
+    try:
+        obj_id = ObjectId(user_id)
+    except:
+        raise HTTPException(status_code=400, detail="Invalid user ID")
+    
+    user = await db.users.find_one({"_id": obj_id})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Cannot modify Super Admin's password login (always enabled)
+    if user["email"] == "info@dsgtransport.net":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Super Admin's password login cannot be modified"
+        )
+    
+    await db.users.update_one(
+        {"_id": obj_id},
+        {"$set": {"password_login_enabled": enabled}}
+    )
+    
+    # Log activity
+    await log_activity(
+        user_email=current_user["email"],
+        user_name=current_user.get("name", current_user["email"]),
+        action=f"{'Enabled' if enabled else 'Disabled'} Password Login",
+        target=user.get("name", user["email"]),
+        details=f"Password login {'enabled' if enabled else 'disabled'} for {user['email']}",
+        activity_type=ActivityType.ADMIN
+    )
+    
+    return {
+        "message": f"Password login {'enabled' if enabled else 'disabled'} for {user['name']}",
+        "password_login_enabled": enabled
+    }
+
+@router.put("/{user_id}/set-password")
+async def set_user_password(
+    user_id: str,
+    request: SetPasswordRequest,
+    current_user: dict = Depends(require_admin)
+):
+    """Set password for a user (Super Admin only) - used when enabling password login"""
+    db = await get_db()
+    
+    # Only Super Admin can set passwords
+    if current_user["role"] != "Super Administrator":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only Super Administrator can set user passwords"
+        )
+    
+    try:
+        obj_id = ObjectId(user_id)
+    except:
+        raise HTTPException(status_code=400, detail="Invalid user ID")
+    
+    user = await db.users.find_one({"_id": obj_id})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Update password and enable password login
+    await db.users.update_one(
+        {"_id": obj_id},
+        {"$set": {
+            "password": hash_password(request.password),
+            "plain_password": request.password,
+            "password_login_enabled": True
+        }}
+    )
+    
+    # Log activity
+    await log_activity(
+        user_email=current_user["email"],
+        user_name=current_user.get("name", current_user["email"]),
+        action="Set User Password",
+        target=user.get("name", user["email"]),
+        details=f"Password set and password login enabled for {user['email']}",
+        activity_type=ActivityType.ADMIN
+    )
+    
+    return {
+        "message": f"Password set for {user['name']}",
+        "password_login_enabled": True
+    }
+
