@@ -571,6 +571,51 @@ export const CredentialsPage = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Enable Password Login Dialog */}
+      <Dialog open={passwordLoginDialogOpen} onOpenChange={setPasswordLoginDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <KeyRound className="h-5 w-5 text-primary" />
+              Enable Password Login
+            </DialogTitle>
+            <DialogDescription>
+              Set a password to allow this user to login with email/password as a fallback when Google SSO is unavailable.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="p-3 rounded-lg bg-muted/50">
+              <p className="text-sm"><strong>User:</strong> {selectedUser?.name}</p>
+              <p className="text-sm"><strong>Email:</strong> {selectedUser?.email}</p>
+            </div>
+            <div className="space-y-2">
+              <Label>Set Password</Label>
+              <Input
+                type="text"
+                placeholder="Enter password for user"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Share this password with the user securely (e.g., via WhatsApp, phone call).
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <Button variant="outline" className="flex-1" onClick={() => {
+                setPasswordLoginDialogOpen(false);
+                setNewPassword("");
+                setSelectedUser(null);
+              }}>
+                Cancel
+              </Button>
+              <Button variant="gradient" className="flex-1" onClick={handleEnablePasswordLogin} disabled={isSaving}>
+                {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Enable Password Login"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
