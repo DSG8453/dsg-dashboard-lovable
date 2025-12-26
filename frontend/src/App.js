@@ -173,6 +173,9 @@ function AppRoutes() {
         }
       />
 
+      {/* Public Routes - No Login Required */}
+      <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
+
       {/* Catch all - redirect to dashboard */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
