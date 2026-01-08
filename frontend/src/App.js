@@ -189,6 +189,19 @@ function App() {
         <SupportProvider>
           <AppRoutes />
           <Toaster position="top-right" richColors />
+          {/* DSG Transport Branding Badge */}
+          <a 
+            href="https://portal.dsgtransport.net" 
+            className="dsg-brand-badge"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <img 
+              src="https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/691ee53ded166d6334e8b9c6/0583cf617_315logodsg_.png" 
+              alt="DSG Transport" 
+            />
+            <span>DSG Transport LLC</span>
+          </a>
         </SupportProvider>
       </AuthProvider>
     </BrowserRouter>
