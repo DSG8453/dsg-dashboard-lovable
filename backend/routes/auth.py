@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.responses import RedirectResponse
 from models.schemas import LoginRequest, TokenResponse
-from utils.security import verify_password, create_access_token, decode_token
+from utils.security import verify_password, create_access_token, decode_token, hash_password
 from utils.email_service import send_otp_email
 from database import get_db
 from bson import ObjectId
@@ -9,10 +10,17 @@ from pydantic import BaseModel
 import random
 import string
 import os
+import httpx
 from datetime import datetime, timezone, timedelta
+from urllib.parse import urlencode
 
 router = APIRouter()
 security = HTTPBearer()
+
+# Google OAuth settings
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
+GOOGLE_REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI", "https://portal.dsgtransport.net/api/auth/google/callback")
 
 class OTPRequest(BaseModel):
     email: str
