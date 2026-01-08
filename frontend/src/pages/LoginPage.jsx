@@ -31,15 +31,9 @@ export const LoginPage = () => {
     setIsLoading(true);
     
     try {
-      const redirectUrl = window.location.origin + '/';
-      const authUrl = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
-      
-      // If in iframe (Emergent preview), redirect the parent/top window
-      if (isInIframe()) {
-        window.top.location.href = authUrl;
-      } else {
-        window.location.replace(authUrl);
-      }
+      // Direct Google OAuth - redirects to Google login page
+      const backendUrl = process.env.REACT_APP_BACKEND_URL || '';
+      window.location.href = `${backendUrl}/api/auth/google/login`;
     } catch (error) {
       setIsLoading(false);
       toast.error("Login failed", {
