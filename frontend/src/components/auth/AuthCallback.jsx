@@ -6,12 +6,10 @@ import { Loader2 } from "lucide-react";
 
 /**
  * AuthCallback component handles the Google OAuth callback.
- * It processes the session_id from the URL fragment and exchanges it for a JWT token.
- * 
- * REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
+ * It processes the token or session_id from the URL fragment and sets up the user session.
  */
 export const AuthCallback = () => {
-  const { loginWithGoogle } = useAuth();
+  const { loginWithGoogle, loginWithToken } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const hasProcessed = useRef(false);
@@ -22,43 +20,83 @@ export const AuthCallback = () => {
     hasProcessed.current = true;
 
     const processSession = async () => {
-      // Extract session_id from URL fragment (after #)
+      // Extract params from URL fragment (after #)
       const hash = location.hash;
       const params = new URLSearchParams(hash.replace("#", ""));
+      
+      // Check for direct token (from new Google OAuth flow)
+      const token = params.get("token");
+      
+      // Check for session_id (from legacy Emergent auth flow)
       const sessionId = params.get("session_id");
-
-      if (!sessionId) {
-        toast.error("Invalid authentication callback");
+      
+      // Check for error
+      const error = params.get("error");
+      
+      if (error) {
+        let errorMessage = "Authentication failed";
+        if (error === "no_account") {
+          const email = params.get("email");
+          errorMessage = `No account found for ${email || 'this email'}. Please contact your administrator.`;
+        } else if (error === "suspended") {
+          errorMessage = "Your account is suspended. Please contact administrator.";
+        }
+        toast.error("Login Failed", { description: errorMessage });
         navigate("/login", { replace: true });
         return;
       }
 
-      try {
-        const result = await loginWithGoogle(sessionId);
-
-        if (result.success) {
-          toast.success("Welcome!", {
-            description: `Signed in as ${result.user.name}`,
-          });
-          // Navigate to dashboard with user data
-          navigate("/", { replace: true, state: { user: result.user } });
-        } else {
-          toast.error("Login Failed", {
-            description: result.error,
-          });
+      if (token) {
+        // New direct Google OAuth flow - token received directly
+        try {
+          const result = await loginWithToken(token);
+          
+          if (result.success) {
+            toast.success("Welcome!", {
+              description: `Signed in as ${result.user.name}`,
+            });
+            navigate("/", { replace: true });
+          } else {
+            toast.error("Login Failed", { description: result.error });
+            navigate("/login", { replace: true });
+          }
+        } catch (error) {
+          console.error("Token auth error:", error);
+          toast.error("Authentication failed");
           navigate("/login", { replace: true });
         }
-      } catch (error) {
-        console.error("Google auth callback error:", error);
-        toast.error("Authentication failed", {
-          description: "Please try again or use email login.",
-        });
-        navigate("/login", { replace: true });
+        return;
       }
+
+      if (sessionId) {
+        // Legacy Emergent auth flow
+        try {
+          const result = await loginWithGoogle(sessionId);
+
+          if (result.success) {
+            toast.success("Welcome!", {
+              description: `Signed in as ${result.user.name}`,
+            });
+            navigate("/", { replace: true, state: { user: result.user } });
+          } else {
+            toast.error("Login Failed", { description: result.error });
+            navigate("/login", { replace: true });
+          }
+        } catch (error) {
+          console.error("Google auth callback error:", error);
+          toast.error("Authentication failed");
+          navigate("/login", { replace: true });
+        }
+        return;
+      }
+
+      // No token or session_id found
+      toast.error("Invalid authentication callback");
+      navigate("/login", { replace: true });
     };
 
     processSession();
-  }, [location.hash, loginWithGoogle, navigate]);
+  }, [location.hash, loginWithGoogle, loginWithToken, navigate]);
 
   return (
     <div className="min-h-screen bg-gradient-dsg flex items-center justify-center">
