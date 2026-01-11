@@ -4,6 +4,8 @@ Users cannot access tools outside the dashboard
 Credentials are never visible
 """
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from services.secret_manager_service import secret_manager
+from utils.tool_mapping import normalize_tool_name
 from fastapi.responses import HTMLResponse, StreamingResponse
 from database import get_db
 from routes.auth import get_current_user
@@ -50,11 +52,23 @@ async def start_gateway_session(
         if tool_id not in allowed_tools:
             raise HTTPException(status_code=403, detail="Access denied")
     
-    credentials = tool.get("credentials", {})
-    base_url = credentials.get("login_url") or tool.get("url", "")
+# Get credentials from Secret Manager
+    tool_name_normalized = normalize_tool_name(tool.get("name", ""))
     
-    if not base_url:
-        raise HTTPException(status_code=400, detail="Tool URL not configured")
+    try:
+        credentials = secret_manager.get_tool_credentials(tool_name_normalized)
+        base_url = tool.get("url", "") or tool.get("login_url", "")
+        
+        if not base_url:
+            raise HTTPException(status_code=400, detail="Tool URL not configured")
+        
+        credentials["login_url"] = base_url
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to retrieve credentials: {str(e)}"
+        )
     
     # Create gateway session
     session_token = secrets.token_urlsafe(32)
@@ -113,10 +127,19 @@ async def view_tool_gateway(session_token: str):
     
     tool_name = session["tool_name"]
     base_url = session["base_url"]
-    credentials = session.get("credentials", {})
     
-    username = credentials.get("username", "")
-    password = credentials.get("password", "")
+    # Get fresh credentials from Secret Manager
+    tool_name_normalized = normalize_tool_name(tool_name)
+    try:
+        credentials = secret_manager.get_tool_credentials(tool_name_normalized)
+        username = credentials.get("username", "")
+        password = credentials.get("password", "")
+    except Exception as e:
+        return HTMLResponse(
+            content=get_error_html("Credentials Error", 
+                "Failed to retrieve credentials. Contact your administrator."),
+            status_code=500
+        )
     
     # Encode credentials for secure copy (not visible to user)
     encoded_user = base64.b64encode(username.encode()).decode()
