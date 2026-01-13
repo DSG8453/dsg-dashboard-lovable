@@ -305,7 +305,7 @@ export const ToolCard = ({ tool, onDelete, onUpdate }) => {
   // Fallback access using request-access endpoint (opens in new tab with auto-submit form)
   const handleFallbackAccess = async () => {
     try {
-      const response = await toolsAPI.requestSecureAccess(tool.id);
+      const response = await toolsAPI.startGatewaySession(tool.id);
       
       if (response.access_url) {
         // Open the secure access URL (handles auto-login via form submission)
