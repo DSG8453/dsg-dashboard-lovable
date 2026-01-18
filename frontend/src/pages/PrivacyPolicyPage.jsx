@@ -1,8 +1,10 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Shield, Lock, Database, Mail, FileText, Users } from "lucide-react";
+import { useCurrentYear } from "@/hooks/useCurrentYear";
 
 export const PrivacyPolicyPage = () => {
   const lastUpdated = "December 26, 2024";
+  const currentYear = useCurrentYear();
 
   return (
     <div className="min-h-screen bg-gray-50 py-12 px-4">
@@ -166,7 +168,7 @@ export const PrivacyPolicyPage = () => {
             {/* Legal */}
             <section className="border-t pt-6">
               <p className="text-sm text-gray-500 text-center">
-                © {new Date().getFullYear()} DSG Transport LLC. All rights reserved.<br />
+                © {currentYear} DSG Transport LLC. All rights reserved.<br />
                 This privacy policy is effective as of {lastUpdated}.
               </p>
             </section>

@@ -7,6 +7,7 @@ import { useAuth } from "@/context/AuthContext";
 import { authAPI } from "@/services/api";
 import { toast } from "sonner";
 import { Loader2, ArrowLeft, Shield, Mail, Lock, CheckCircle } from "lucide-react";
+import { useCurrentYear } from "@/hooks/useCurrentYear";
 
 export const LoginPage = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -17,6 +18,7 @@ export const LoginPage = () => {
   const [passwordLoginAllowed, setPasswordLoginAllowed] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
+  const currentYear = useCurrentYear();
 
   // Check if we're inside an iframe (Emergent preview panel)
   const isInIframe = () => {
@@ -351,7 +353,7 @@ export const LoginPage = () => {
 
         {/* Copyright */}
         <p className="text-xs text-gray-500 mt-6 font-semibold">
-          © {new Date().getFullYear()} DSG Transport LLC. All rights reserved.
+          © {currentYear} DSG Transport LLC. All rights reserved.
         </p>
       </div>
     </div>
