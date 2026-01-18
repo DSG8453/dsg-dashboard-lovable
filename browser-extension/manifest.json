@@ -1,0 +1,50 @@
+{
+  "manifest_version": 3,
+  "name": "DSG Transport Secure Login",
+  "version": "1.0.5",
+  "description": "Secure auto-login for licensed business applications used by DSG Transport LLC. Credentials never visible to users.",
+  "permissions": [
+    "storage",
+    "tabs"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "externally_connectable": {
+    "matches": [
+      "https://*.dsgtransport.net/*",
+      "http://*.dsgtransport.net/*",
+      "https://*.dsgtransport.com/*",
+      "http://*.dsgtransport.com/*",
+      "https://*.teamdsgtransport.com/*",
+      "http://*.teamdsgtransport.com/*",
+      "https://*.emergentagent.com/*",
+      "http://*.emergentagent.com/*",
+      "http://localhost/*",
+      "http://localhost:3000/*"
+    ]
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icon16.png",
+      "48": "icon48.png",
+      "128": "icon128.png"
+    }
+  }
+}
