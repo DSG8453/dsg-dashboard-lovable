@@ -351,7 +351,7 @@ export const LoginPage = () => {
 
         {/* Copyright */}
         <p className="text-xs text-gray-500 mt-6 font-semibold">
-          © 2025 DSG Transport LLC. All rights reserved.
+          © {new Date().getFullYear()} DSG Transport LLC. All rights reserved.
         </p>
       </div>
     </div>
