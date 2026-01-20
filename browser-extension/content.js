@@ -628,10 +628,12 @@
     if (!element) return false;
     
     const style = window.getComputedStyle(element);
-    return style.display !== 'none' && 
-           style.visibility !== 'hidden' && 
-           style.opacity !== '0' &&
-           element.offsetParent !== null;
+    if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') {
+      return false;
+    }
+    
+    const rect = element.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
   }
   
   function fillField(element, value) {
