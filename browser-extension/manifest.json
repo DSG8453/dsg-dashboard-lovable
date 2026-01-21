@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "DSG Transport Secure Login",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "Secure auto-login for licensed business applications used by DSG Transport LLC. Credentials never visible to users.",
   "permissions": [
     "storage",
@@ -37,15 +37,15 @@
   ],
   "icons": {
     "16": "icon16.png",
-    "48": "icon48.png",
-    "128": "icon128.png"
+    "48": "icon16.png",
+    "128": "icon16.png"
   },
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
       "16": "icon16.png",
-      "48": "icon48.png",
-      "128": "icon128.png"
+      "48": "icon16.png",
+      "128": "icon16.png"
     }
   }
 }
