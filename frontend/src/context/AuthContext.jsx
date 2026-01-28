@@ -15,6 +15,10 @@ export const AuthProvider = ({ children }) => {
   const [wsConnected, setWsConnected] = useState(false);
   const wsRef = useRef(null);
   const pingIntervalRef = useRef(null);
+  const tokenRefreshIntervalRef = useRef(null);
+  
+  // Token refresh interval - refresh every 25 minutes (before 30 min expiry)
+  const TOKEN_REFRESH_INTERVAL = 25 * 60 * 1000; // 25 minutes in ms
   
   // Logout function - defined early so it can be used in WebSocket handler
   const logout = useCallback(() => {
@@ -115,6 +119,62 @@ export const AuthProvider = ({ children }) => {
       }
       if (wsRef.current) {
         wsRef.current.close(1000);
+      }
+    };
+  }, [token, logout]);
+
+  // Token auto-refresh effect - keeps token fresh to prevent expiry
+  useEffect(() => {
+    if (!token) {
+      // Clear refresh interval when logged out
+      if (tokenRefreshIntervalRef.current) {
+        clearInterval(tokenRefreshIntervalRef.current);
+        tokenRefreshIntervalRef.current = null;
+      }
+      return;
+    }
+
+    // Function to refresh the token
+    const refreshToken = async () => {
+      try {
+        console.log('[Auth] Refreshing token...');
+        const response = await authAPI.refreshToken();
+        
+        if (response.access_token) {
+          setToken(response.access_token);
+          localStorage.setItem("dsg_token", response.access_token);
+          
+          if (response.user) {
+            setUser(response.user);
+            localStorage.setItem("dsg_user", JSON.stringify(response.user));
+          }
+          
+          console.log('[Auth] Token refreshed successfully');
+        }
+      } catch (error) {
+        console.error('[Auth] Token refresh failed:', error);
+        // If refresh fails with 401, token is invalid - logout
+        if (error.message?.includes('401') || error.message?.includes('expired')) {
+          console.log('[Auth] Token expired, logging out...');
+          logout();
+        }
+      }
+    };
+
+    // Refresh token immediately on mount (in case token is close to expiry)
+    // Then set up interval for periodic refresh
+    const initialRefreshDelay = 5000; // Wait 5 seconds after mount before first refresh
+    const initialTimeout = setTimeout(() => {
+      refreshToken();
+    }, initialRefreshDelay);
+
+    // Set up interval to refresh token every 25 minutes
+    tokenRefreshIntervalRef.current = setInterval(refreshToken, TOKEN_REFRESH_INTERVAL);
+
+    return () => {
+      clearTimeout(initialTimeout);
+      if (tokenRefreshIntervalRef.current) {
+        clearInterval(tokenRefreshIntervalRef.current);
       }
     };
   }, [token, logout]);
