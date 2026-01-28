@@ -65,6 +65,9 @@ export const authAPI = {
   
   getMe: () => fetchAPI('/api/auth/me'),
   
+  // Refresh token - get a new token with extended expiry
+  refreshToken: () => fetchAPI('/api/auth/refresh', { method: 'POST' }),
+  
   logout: () => fetchAPI('/api/auth/logout', { method: 'POST' }),
 
   // Password management

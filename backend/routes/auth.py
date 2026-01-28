@@ -407,6 +407,30 @@ async def logout(current_user: dict = Depends(get_current_user)):
     return {"message": "Logged out successfully"}
 
 
+@router.post("/refresh")
+async def refresh_token(current_user: dict = Depends(get_current_user)):
+    """
+    Refresh the access token.
+    Returns a new token with extended expiry.
+    The current token must still be valid to refresh.
+    """
+    from datetime import timedelta
+    
+    # Create new token with fresh expiry
+    token_data = {
+        "sub": current_user["id"],
+        "email": current_user["email"],
+        "role": current_user["role"]
+    }
+    new_token = create_access_token(token_data, expires_delta=timedelta(minutes=30))
+    
+    return {
+        "access_token": new_token,
+        "expires_in": 1800,  # 30 minutes in seconds
+        "user": current_user
+    }
+
+
 # ============ DIRECT GOOGLE OAUTH ============
 
 @router.get("/google/login")
