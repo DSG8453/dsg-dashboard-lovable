@@ -127,7 +127,7 @@ export const ToolCard = ({ tool, onDelete, onUpdate }) => {
     // List of extension IDs to try (saved ID first, then user's known ID)
     const extensionIdsToTry = [
       savedId,
-      'hommlifemnoidmlmgmciledgnbpamgep', // User's extension ID
+      'ecplabhnjcnjbpfggkgmjifakboclhlo', // DSG Transport extension ID
     ].filter(Boolean);
     
     if (typeof chrome === 'undefined' || !chrome.runtime) {
@@ -183,7 +183,7 @@ export const ToolCard = ({ tool, onDelete, onUpdate }) => {
     // Try auto-detect if no extension ID saved
     if (!extensionId) {
       // Try the known extension ID
-      const knownId = 'hommlifemnoidmlmgmciledgnbpamgep';
+      const knownId = 'ecplabhnjcnjbpfggkgmjifakboclhlo';
       
       if (typeof chrome !== 'undefined' && chrome.runtime) {
         try {
