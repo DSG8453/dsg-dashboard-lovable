@@ -69,11 +69,10 @@ function AppRoutes() {
   const { user } = useAuth();
   const location = useLocation();
 
-  // CRITICAL: Check for session_id or token in URL fragment synchronously during render
+  // CRITICAL: Check for token in URL fragment synchronously during render
   // This must happen BEFORE ProtectedRoute runs to prevent race conditions
-  // session_id = legacy Emergent auth flow
-  // token = new direct Google OAuth flow
-  if (location.hash?.includes('session_id=') || location.hash?.includes('token=')) {
+  // token = direct Google OAuth flow
+  if (location.hash?.includes('token=')) {
     return <AuthCallback />;
   }
 

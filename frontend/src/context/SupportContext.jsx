@@ -71,7 +71,7 @@ export const SupportProvider = ({ children }) => {
     }
   };
 
-  // Send to Emergent AI for analysis
+  // Send to AI for analysis
   const analyzeWithAI = async (issueId) => {
     try {
       const analysis = await issuesAPI.analyze(issueId);

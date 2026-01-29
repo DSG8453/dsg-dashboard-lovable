@@ -18,7 +18,7 @@ export const LoginPage = () => {
   const { login } = useAuth();
   const navigate = useNavigate();
 
-  // Check if we're inside an iframe (Emergent preview panel)
+  // Check if we're inside an iframe
   const isInIframe = () => {
     try {
       return window.self !== window.top;

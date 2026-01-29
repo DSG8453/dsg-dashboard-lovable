@@ -27,14 +27,17 @@ This guide explains how to deploy the DSG Transport Secure Login extension to al
 
 ## Step 3: Add the Extension
 
-### Option A: Force Install from URL (Recommended)
+### Option A: Force Install from Chrome Web Store (Recommended)
 
 1. Click the **+** (Add) button → **Add Chrome app or extension by ID**
 2. In the dialog:
-   - **Extension ID**: Leave blank for now (we'll configure via policy)
-   - **Installation URL**: 
+   - **Extension ID**:
      ```
-     https://keyvault-27.preview.emergentagent.com/extension-update.xml
+     ecplabhnjcnjbpfggkgmjifakboclhlo
+     ```
+   - **Installation URL**:
+     ```
+     https://clients2.google.com/service/update2/crx
      ```
 3. Click **Save**
 
@@ -48,7 +51,7 @@ This guide explains how to deploy the DSG Transport Secure Login extension to al
    ```json
    {
      "installation_mode": "force_installed",
-     "update_url": "https://keyvault-27.preview.emergentagent.com/extension-update.xml"
+     "update_url": "https://clients2.google.com/service/update2/crx"
    }
    ```
 
@@ -113,16 +116,16 @@ This means the extension is not force-installed. Check:
 
 | File | URL |
 |------|-----|
-| Extension ZIP | `https://keyvault-27.preview.emergentagent.com/dsg-transport-extension.zip` |
-| Update Manifest | `https://keyvault-27.preview.emergentagent.com/extension-update.xml` |
-| Policy JSON | `https://keyvault-27.preview.emergentagent.com/extension-policy.json` |
+| Chrome Web Store Listing | `https://chromewebstore.google.com/detail/ecplabhnjcnjbpfggkgmjifakboclhlo` |
+| Update Manifest | `https://portal.dsgtransport.net/extension-update.xml` |
+| Policy JSON | `https://portal.dsgtransport.net/extension-policy.json` |
 
 ---
 
 ## Security Notes
 
 1. **Force-installed extensions cannot be uninstalled by users** - This ensures all employees have the extension
-2. **Extensions update automatically** - When you update the ZIP file, all users get the update
+2. **Extensions update automatically** - Updates are delivered via the Chrome Web Store/update URL
 3. **Only works with managed accounts** - Personal Gmail accounts won't receive the extension
 4. **Audit trail** - Google Admin Console logs all extension installations
 

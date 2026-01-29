@@ -80,7 +80,7 @@ export const SupportManagementPage = () => {
 
   const handleAnalyzeWithAI = async (issueId) => {
     setIsAnalyzing(true);
-    toast.info("Sending to Emergent AI for analysis...");
+    toast.info("Sending to AI for analysis...");
     
     try {
       const analysis = await analyzeWithAI(issueId);
@@ -394,7 +394,7 @@ export const SupportManagementPage = () => {
                   <div className="flex items-center justify-between">
                     <Label className="flex items-center gap-2">
                       <Bot className="h-4 w-4 text-primary" />
-                      Emergent AI Analysis
+                      AI Analysis
                     </Label>
                     {!selectedIssue.aiAnalysis && (
                       <Button
@@ -411,7 +411,7 @@ export const SupportManagementPage = () => {
                         ) : (
                           <>
                             <Sparkles className="h-4 w-4 mr-2" />
-                            Send to Emergent
+                            Send to AI
                           </>
                         )}
                       </Button>
@@ -443,7 +443,7 @@ export const SupportManagementPage = () => {
                     <div className="p-4 rounded-lg border border-dashed border-border text-center">
                       <Bot className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
                       <p className="text-sm text-muted-foreground">
-                        Click "Send to Emergent" to get AI-powered analysis and suggested fixes
+                        Click "Send to AI" to get AI-powered analysis and suggested fixes
                       </p>
                     </div>
                   )}

@@ -6,10 +6,10 @@ import { Loader2 } from "lucide-react";
 
 /**
  * AuthCallback component handles the Google OAuth callback.
- * It processes the token or session_id from the URL fragment and sets up the user session.
+ * It processes the token from the URL fragment and sets up the user session.
  */
 export const AuthCallback = () => {
-  const { loginWithGoogle, loginWithToken } = useAuth();
+  const { loginWithToken } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const hasProcessed = useRef(false);
@@ -24,11 +24,8 @@ export const AuthCallback = () => {
       const hash = location.hash;
       const params = new URLSearchParams(hash.replace("#", ""));
       
-      // Check for direct token (from new Google OAuth flow)
+      // Check for direct token (from Google OAuth flow)
       const token = params.get("token");
-      
-      // Check for session_id (from legacy Emergent auth flow)
-      const sessionId = params.get("session_id");
       
       // Check for error
       const error = params.get("error");
@@ -68,35 +65,13 @@ export const AuthCallback = () => {
         return;
       }
 
-      if (sessionId) {
-        // Legacy Emergent auth flow
-        try {
-          const result = await loginWithGoogle(sessionId);
-
-          if (result.success) {
-            toast.success("Welcome!", {
-              description: `Signed in as ${result.user.name}`,
-            });
-            navigate("/", { replace: true, state: { user: result.user } });
-          } else {
-            toast.error("Login Failed", { description: result.error });
-            navigate("/login", { replace: true });
-          }
-        } catch (error) {
-          console.error("Google auth callback error:", error);
-          toast.error("Authentication failed");
-          navigate("/login", { replace: true });
-        }
-        return;
-      }
-
-      // No token or session_id found
+      // No token found
       toast.error("Invalid authentication callback");
       navigate("/login", { replace: true });
     };
 
     processSession();
-  }, [location.hash, loginWithGoogle, loginWithToken, navigate]);
+  }, [location.hash, loginWithToken, navigate]);
 
   return (
     <div className="min-h-screen bg-gradient-dsg flex items-center justify-center">

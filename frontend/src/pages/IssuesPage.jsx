@@ -106,7 +106,7 @@ export const IssuesPage = () => {
 
   const handleAnalyzeWithAI = async (issueId) => {
     setIsAnalyzing(true);
-    toast.info("Sending to Emergent AI for analysis...");
+    toast.info("Sending to AI for analysis...");
 
     try {
       const analysis = await analyzeWithAI(issueId);
@@ -453,7 +453,7 @@ export const IssuesPage = () => {
                           ) : (
                             <>
                               <Sparkles className="h-4 w-4 mr-2" />
-                              Send to Emergent
+                              Send to AI
                             </>
                           )}
                         </Button>
