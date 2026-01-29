@@ -265,8 +265,7 @@ function getBackendUrl() {
     'https://secure.dsgtransport.net',
     'https://app.dsgtransport.net', 
     'https://secure.dsgtransport.com',
-    'https://app.dsgtransport.com',
-    'https://keyvault-27.preview.emergentagent.com'
+    'https://app.dsgtransport.com'
   ];
   
   // Return the production URL as default
@@ -277,7 +276,7 @@ function getBackendUrl() {
 let dynamicBackendUrl = null;
 
 function setBackendUrl(url) {
-  if (url && (url.includes('dsgtransport') || url.includes('emergentagent'))) {
+  if (url && url.includes('dsgtransport')) {
     dynamicBackendUrl = url.replace(/\/$/, ''); // Remove trailing slash
     console.log('[DSG Extension] Backend URL set to:', dynamicBackendUrl);
   }

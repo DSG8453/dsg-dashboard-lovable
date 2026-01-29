@@ -99,7 +99,7 @@ Contact your DSG Transport administrator.
 Each installation generates a unique Extension ID. Users must enter this ID once in the DSG Transport dashboard.
 
 ### Security Notes
-- Extension only communicates with `*.emergentagent.com` and `*.dsgtransport.com`
+- Extension only communicates with `*.dsgtransport.net`, `*.dsgtransport.com`, and `*.teamdsgtransport.com`
 - Credentials are passed via Chrome's secure messaging API
 - No data is stored permanently - auto-clears after 5 minutes
 

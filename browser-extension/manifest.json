@@ -20,8 +20,6 @@
       "http://*.dsgtransport.com/*",
       "https://*.teamdsgtransport.com/*",
       "http://*.teamdsgtransport.com/*",
-      "https://*.emergentagent.com/*",
-      "http://*.emergentagent.com/*",
       "http://localhost/*",
       "http://localhost:3000/*"
     ]

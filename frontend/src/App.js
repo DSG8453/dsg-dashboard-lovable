@@ -71,8 +71,7 @@ function AppRoutes() {
 
   // CRITICAL: Check for session_id or token in URL fragment synchronously during render
   // This must happen BEFORE ProtectedRoute runs to prevent race conditions
-  // session_id = legacy Emergent auth flow
-  // token = new direct Google OAuth flow
+  // session_id = legacy auth flow, token = Google OAuth flow
   if (location.hash?.includes('session_id=') || location.hash?.includes('token=')) {
     return <AuthCallback />;
   }
