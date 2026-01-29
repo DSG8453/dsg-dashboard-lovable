@@ -287,7 +287,7 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Google OAuth Login (Legacy - Emergent)
+  // Google OAuth Login (Legacy)
   const loginWithGoogle = async (sessionId) => {
     try {
       const response = await authAPI.googleSession(sessionId);

@@ -76,7 +76,7 @@ export const WhatsAppSupport = () => {
 
   return (
     <>
-      {/* Floating WhatsApp Button - Positioned above "Made with Emergent" */}
+      {/* Floating WhatsApp Button */}
       <div className="fixed bottom-24 right-6 z-50 flex flex-col items-end gap-3">
         <TooltipProvider>
           <Tooltip>

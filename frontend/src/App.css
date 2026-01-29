@@ -16,17 +16,6 @@ main {
   }
 }
 
-/* Hide Emergent branding badge */
-[class*="emergent"],
-[id*="emergent"],
-a[href*="emergent"],
-div[style*="position: fixed"][style*="bottom"],
-iframe[src*="emergent"] {
-  display: none !important;
-  visibility: hidden !important;
-  opacity: 0 !important;
-  pointer-events: none !important;
-}
 
 /* Custom DSG Transport branding */
 .dsg-brand-badge {
