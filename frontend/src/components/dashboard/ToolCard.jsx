@@ -309,8 +309,9 @@ export const ToolCard = ({ tool, onDelete, onUpdate }) => {
       
       if (response.access_url || response.gateway_url) {
         // Open the secure access URL (handles auto-login via form submission)
-        const fullUrl = process.env.REACT_APP_BACKEND_URL + (response.gateway_url || response.access_url);
-        window.open(fullUrl, "_blank", "noopener,noreferrer");
+        // Use relative path - Vercel proxies /api/* to the backend
+        const gatewayPath = response.gateway_url || response.access_url;
+        window.open(gatewayPath, "_blank", "noopener,noreferrer");
         
         toast.success(`Opening ${tool.name}`, {
           description: response.has_auto_login 
