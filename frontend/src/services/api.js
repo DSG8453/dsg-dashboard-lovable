@@ -275,11 +275,7 @@ export const toolsAPI = {
   startGatewaySession: (toolId) =>
     fetchAPI(`/api/gateway/start/${toolId}`, { method: 'POST' }),
   
-  // Get credentials payload for browser extension
-  getExtensionPayload: (toolId) =>
-    fetchAPI(`/api/secure-access/${toolId}/extension-payload`, { method: 'POST' }),
-  
-  // Direct login - Server logs in and returns authenticated session (Bitwarden-style)
+  // Direct login - Server logs in and returns authenticated session
   directLogin: (toolId) =>
     fetchAPI(`/api/secure-access/${toolId}/direct-login`, { method: 'POST' }),
 };
