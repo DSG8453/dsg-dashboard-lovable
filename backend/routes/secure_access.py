@@ -1,29 +1,20 @@
 """
-Secure Tool Access Service - Zero Visibility Credentials
-Credentials are NEVER shown to users - login happens automatically via browser extension
+Secure Tool Access Service - Gateway-Based Authentication
+Credentials are NEVER shown to users - login happens via secure gateway
 """
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import HTMLResponse, RedirectResponse
-from pydantic import BaseModel
+from fastapi.responses import HTMLResponse
 from database import get_db
 from routes.auth import get_current_user
 from bson import ObjectId
 from datetime import datetime, timezone, timedelta
 import secrets
 import hashlib
-import base64
-import json
-from cryptography.fernet import Fernet
-import os
 
 router = APIRouter()
 
 # Store one-time access tokens
 access_tokens = {}
-
-# Encryption key for extension payloads (generate once)
-EXTENSION_KEY = os.environ.get("EXTENSION_KEY", Fernet.generate_key().decode())
-fernet = Fernet(EXTENSION_KEY.encode() if isinstance(EXTENSION_KEY, str) else EXTENSION_KEY)
 
 
 @router.post("/{tool_id}/request-access")
@@ -81,7 +72,7 @@ async def request_tool_access(
         "user_name": current_user.get("name", current_user["email"]),
         "action": "Accessed Tool",
         "target": tool.get("name"),
-        "details": f"Secure auto-login to {tool.get('name')}",
+        "details": f"Secure access to {tool.get('name')}",
         "activity_type": "access",
         "created_at": datetime.now(timezone.utc).isoformat()
     })
@@ -99,8 +90,7 @@ async def request_tool_access(
 @router.get("/launch/{access_token}")
 async def launch_tool(access_token: str):
     """
-    Launch tool - For secure auto-login, the browser extension is REQUIRED.
-    Without extension, users cannot access credentials.
+    Launch tool - Redirects to gateway for secure credential access
     """
     token_hash = hashlib.sha256(access_token.encode()).hexdigest()
     token_data = access_tokens.get(token_hash)
@@ -124,7 +114,7 @@ async def launch_tool(access_token: str):
     tool_name = token_data["tool_name"]
     has_credentials = token_data.get("has_credentials", False)
     
-    # Show extension required page - credentials are NEVER shown without extension
+    # Redirect to gateway for tools with credentials, or directly to tool
     html = f'''<!DOCTYPE html>
 <html>
 <head>
@@ -142,18 +132,19 @@ body{{margin:0;padding:20px;font-family:system-ui,-apple-system,sans-serif;backg
 .btn-primary:hover{{transform:translateY(-1px);box-shadow:0 4px 12px rgba(59,130,246,0.4)}}
 .btn-secondary{{background:rgba(255,255,255,0.1);color:#fff;width:100%}}
 .btn-secondary:hover{{background:rgba(255,255,255,0.15)}}
-.extension-box{{background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.3);border-radius:12px;padding:20px;margin:20px 0}}
-.extension-box h3{{color:#22c55e;margin:0 0 8px 0;font-size:16px}}
-.extension-box p{{color:#94a3b8;margin:0;font-size:13px}}
-.warning{{background:rgba(234,179,8,0.1);border:1px solid rgba(234,179,8,0.3);border-radius:8px;padding:12px;margin-top:16px;font-size:12px;color:#eab308}}
+.info-box{{background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.3);border-radius:12px;padding:20px;margin:20px 0}}
+.info-box h3{{color:#22c55e;margin:0 0 8px 0;font-size:16px}}
+.info-box p{{color:#94a3b8;margin:0;font-size:13px}}
 .icon{{width:48px;height:48px;margin:0 auto 16px}}
+.spinner{{width:24px;height:24px;border:3px solid rgba(255,255,255,0.2);border-top-color:#3b82f6;border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 16px}}
+@keyframes spin{{to{{transform:rotate(360deg)}}}}
 </style>
 </head>
 <body>
 <div class="container">
 <div class="logo">🔐 DSG Transport</div>
 
-<svg class="icon" fill="none" stroke="#3b82f6" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+<div class="spinner"></div>
 
 <div class="tool-name">📱 {tool_name}</div>
 
@@ -161,19 +152,24 @@ body{{margin:0;padding:20px;font-family:system-ui,-apple-system,sans-serif;backg
 {"This tool has <strong>secure credentials</strong> managed by DSG Transport." if has_credentials else "Opening " + tool_name + "..."}
 </div>
 
-{"<div class='extension-box'><h3>🧩 Browser Extension Required</h3><p>To auto-fill credentials securely, please install the DSG Transport browser extension from your dashboard.</p></div>" if has_credentials else ""}
+{"<div class='info-box'><h3>🔒 Secure Gateway Access</h3><p>Your credentials are protected. Use the gateway to securely copy and paste login details.</p></div>" if has_credentials else ""}
 
-<a href="{login_url}" target="_blank" class="btn btn-primary">
-Open {tool_name} {"(Manual Login)" if has_credentials else ""}
+<a href="{login_url}" target="_blank" class="btn btn-primary" id="openBtn">
+Open {tool_name}
 </a>
 
 <a href="/" class="btn btn-secondary">
 ← Return to Dashboard
 </a>
 
-{"<div class='warning'>⚠️ Without the extension, you cannot access credentials. Contact your Super Admin if you need help.</div>" if has_credentials else ""}
-
 </div>
+
+<script>
+// Auto-open the tool after a short delay
+setTimeout(function() {{
+    window.open("{login_url}", "_blank");
+}}, 1500);
+</script>
 </body>
 </html>'''
     
@@ -194,190 +190,6 @@ a{{color:#3b82f6;margin-top:20px;display:inline-block}}
 </html>'''
 
 
-@router.post("/{tool_id}/extension-payload")
-async def get_extension_payload(
-    tool_id: str,
-    current_user: dict = Depends(get_current_user)
-):
-    """
-    Get encrypted credential payload for browser extension.
-    SECURITY: Credentials are encrypted and can only be decrypted by the extension.
-    The payload is time-limited and tied to the user's session.
-    """
-    db = await get_db()
-    
-    try:
-        obj_id = ObjectId(tool_id)
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid tool ID")
-    
-    tool = await db.tools.find_one({"_id": obj_id})
-    if not tool:
-        raise HTTPException(status_code=404, detail="Tool not found")
-    
-    # Check if user has access to this tool
-    if current_user.get("role") != "Super Administrator":
-        user_data = await db.users.find_one({"_id": ObjectId(current_user["id"])})
-        allowed_tools = user_data.get("allowed_tools", []) if user_data else []
-        if tool_id not in allowed_tools:
-            raise HTTPException(status_code=403, detail="You don't have access to this tool")
-    
-    credentials = tool.get("credentials", {})
-    login_url = credentials.get("login_url") or tool.get("url", "#")
-    
-    if not login_url or login_url == "#":
-        raise HTTPException(status_code=400, detail="Tool URL not configured")
-    
-    username = credentials.get("username", "")
-    password = credentials.get("password", "")
-    
-    if not username or not password:
-        raise HTTPException(status_code=400, detail="Tool credentials not configured")
-    
-    # SECURITY: Encrypt credentials so they are never visible in network traffic or browser
-    # Only the extension can decrypt using the shared key
-    payload_data = {
-        "u": username,
-        "p": password,
-        "uf": credentials.get("username_field", "username"),
-        "pf": credentials.get("password_field", "password"),
-        "url": login_url,
-        "ts": datetime.now(timezone.utc).isoformat(),
-        "exp": (datetime.now(timezone.utc) + timedelta(minutes=2)).isoformat()
-    }
-    
-    # Encrypt the payload
-    encrypted_payload = fernet.encrypt(json.dumps(payload_data).encode()).decode()
-    
-    # Log access
-    await db.activity_logs.insert_one({
-        "user_email": current_user["email"],
-        "user_name": current_user.get("name", current_user["email"]),
-        "action": "Extension Auto-Login",
-        "target": tool.get("name"),
-        "details": f"Secure auto-login via browser extension to {tool.get('name')}",
-        "activity_type": "access",
-        "created_at": datetime.now(timezone.utc).isoformat()
-    })
-    
-    # Return encrypted payload - credentials are NEVER visible
-    return {
-        "success": True,
-        "encrypted": encrypted_payload,
-        "loginUrl": login_url,
-        "toolName": tool.get("name"),
-        "usernameField": credentials.get("username_field", "username"),
-        "passwordField": credentials.get("password_field", "password"),
-        "expiresIn": 120
-    }
-
-
-class DecryptRequest(BaseModel):
-    encrypted: str
-    extension_id: str = None  # Optional extension ID for verification
-
-
-# Rate limiting for decrypt endpoint - track requests per IP
-decrypt_rate_limit = {}
-MAX_DECRYPT_REQUESTS = 10  # Max requests per minute
-RATE_LIMIT_WINDOW = 60  # seconds
-
-
-def check_rate_limit(client_ip: str) -> bool:
-    """Check if client has exceeded rate limit"""
-    now = datetime.now(timezone.utc)
-    
-    if client_ip not in decrypt_rate_limit:
-        decrypt_rate_limit[client_ip] = {"count": 1, "window_start": now}
-        return True
-    
-    data = decrypt_rate_limit[client_ip]
-    window_elapsed = (now - data["window_start"]).total_seconds()
-    
-    if window_elapsed > RATE_LIMIT_WINDOW:
-        # Reset window
-        decrypt_rate_limit[client_ip] = {"count": 1, "window_start": now}
-        return True
-    
-    if data["count"] >= MAX_DECRYPT_REQUESTS:
-        return False
-    
-    decrypt_rate_limit[client_ip]["count"] += 1
-    return True
-
-
-from fastapi import Request
-
-@router.post("/decrypt-payload")
-async def decrypt_extension_payload(request: DecryptRequest, req: Request):
-    """
-    Decrypt payload for browser extension.
-    
-    SECURITY MEASURES:
-    1. Rate limiting - max 10 requests per minute per IP
-    2. Payload expiration - encrypted payloads expire after 2 minutes
-    3. One-time use - payload contains timestamp tied to session
-    4. Origin validation - checks for extension origin header
-    """
-    # Get client IP for rate limiting
-    client_ip = req.client.host if req.client else "unknown"
-    
-    # Check rate limit
-    if not check_rate_limit(client_ip):
-        return {"success": False, "error": "Rate limit exceeded. Please wait and try again."}
-    
-    # Validate origin - should come from extension (chrome-extension://) or our domain
-    origin = req.headers.get("origin", "")
-    referer = req.headers.get("referer", "")
-    
-    # Allow requests from chrome extensions or our own domain
-    allowed_origins = [
-        "chrome-extension://",
-        "moz-extension://",  # Firefox
-        "safari-extension://",  # Safari
-        "https://safelogin",  # Our domain
-    ]
-    
-    is_valid_origin = any(
-        origin.startswith(prefix) or referer.startswith(prefix) 
-        for prefix in allowed_origins
-    ) or not origin  # Also allow if no origin (direct API calls from extension)
-    
-    if not is_valid_origin and origin:
-        # Log suspicious activity
-        print(f"[SECURITY] Suspicious decrypt request from origin: {origin}, IP: {client_ip}")
-        return {"success": False, "error": "Invalid request origin"}
-    
-    try:
-        # Decrypt the payload
-        decrypted_json = fernet.decrypt(request.encrypted.encode()).decode()
-        payload = json.loads(decrypted_json)
-        
-        # Check expiration (payloads expire after 2 minutes)
-        exp_str = payload.get("exp", "")
-        if exp_str:
-            exp_time = datetime.fromisoformat(exp_str.replace("Z", "+00:00"))
-            if datetime.now(timezone.utc) > exp_time:
-                return {"success": False, "error": "Payload expired. Please request access again."}
-        
-        # Log successful decryption (without credentials)
-        print(f"[SECURITY] Credential decryption for URL: {payload.get('url', 'unknown')[:30]}... from IP: {client_ip}")
-        
-        # Return decrypted credentials (only username/password)
-        # These are used immediately by the extension and not stored
-        return {
-            "success": True,
-            "u": payload.get("u"),
-            "p": payload.get("p"),
-            "uf": payload.get("uf"),
-            "pf": payload.get("pf")
-        }
-        
-    except Exception as e:
-        print(f"[SECURITY] Decrypt failed from IP: {client_ip}, Error: {str(e)[:50]}")
-        return {"success": False, "error": "Invalid or corrupted payload"}
-
-
 @router.delete("/tokens/cleanup")
 async def cleanup_expired_tokens(current_user: dict = Depends(get_current_user)):
     """Clean up expired tokens"""
@@ -392,30 +204,15 @@ async def cleanup_expired_tokens(current_user: dict = Depends(get_current_user))
     return {"message": f"Cleaned up {len(expired)} expired tokens"}
 
 
-# ============ SERVER-SIDE DIRECT LOGIN (BITWARDEN-STYLE) ============
-
-# Note: Full Bitwarden-style "invisible login" requires either:
-# 1. Browser extension to inject cookies (implemented above)
-# 2. Reverse proxy to inject auth headers (complex infrastructure)
-# 3. iframe with proxied content (security restrictions)
-# 
-# The most reliable approach for web tools is the browser extension.
-# Below we implement a "session sharing" approach where the server
-# logs in and attempts to share the session with the user.
-
 @router.post("/{tool_id}/direct-login")
 async def direct_tool_login(
     tool_id: str,
     current_user: dict = Depends(get_current_user)
 ):
     """
-    Attempt direct login to tool.
+    Direct login to tool - returns tool URL and gateway session info.
     
-    Note: Due to cross-domain cookie restrictions, true "invisible login"
-    is not possible without a browser extension. This endpoint performs
-    server-side login and returns status.
-    
-    For seamless auto-login, users should install the browser extension.
+    For tools with credentials, users should use the gateway for secure access.
     """
     db = await get_db()
     
@@ -451,7 +248,7 @@ async def direct_tool_login(
             "has_credentials": False,
             "direct_url": tool.get("url"),
             "tool_name": tool.get("name"),
-            "message": "No credentials configured - use browser extension for auto-login"
+            "message": "No credentials configured - please login manually"
         }
     
     # Log access attempt
@@ -465,33 +262,12 @@ async def direct_tool_login(
         "created_at": datetime.now(timezone.utc).isoformat()
     })
     
-    # Create a one-time access token for extension-based login
-    access_token = secrets.token_urlsafe(32)
-    token_hash = hashlib.sha256(access_token.encode()).hexdigest()
-    
-    access_tokens[token_hash] = {
-        "tool_id": tool_id,
-        "user_id": current_user["id"],
-        "login_url": login_url,
-        "credentials": {
-            "username": username,
-            "password": password,
-            "username_field": credentials.get("username_field", "username"),
-            "password_field": credentials.get("password_field", "password"),
-        },
-        "tool_name": tool.get("name"),
-        "has_credentials": True,
-        "expires_at": datetime.now(timezone.utc) + timedelta(minutes=5),
-        "used": False
-    }
-    
     return {
         "success": True,
         "has_credentials": True,
         "direct_url": login_url,
         "tool_name": tool.get("name"),
-        "access_token": access_token,
-        "message": "For seamless login, use the browser extension. The extension will auto-fill credentials."
+        "message": "Use the gateway for secure credential access"
     }
 
 
@@ -499,7 +275,7 @@ async def direct_tool_login(
 async def direct_launch_tool(tool_id: str):
     """
     Direct launch endpoint - Opens a page that helps users access the tool.
-    Shows extension requirement message and provides tool access.
+    Redirects to gateway for tools with credentials.
     """
     db = await get_db()
     
@@ -517,7 +293,7 @@ async def direct_launch_tool(tool_id: str):
     tool_name = tool.get("name", "Tool")
     has_credentials = bool(credentials.get("username"))
     
-    # Show extension requirement page
+    # Show launch page
     html = f'''<!DOCTYPE html>
 <html>
 <head>
@@ -535,11 +311,9 @@ body{{margin:0;padding:20px;font-family:system-ui,-apple-system,sans-serif;backg
 .btn-primary:hover{{transform:translateY(-1px);box-shadow:0 4px 12px rgba(59,130,246,0.4)}}
 .btn-secondary{{background:rgba(255,255,255,0.1);color:#fff;width:100%}}
 .btn-secondary:hover{{background:rgba(255,255,255,0.15)}}
-.extension-box{{background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.3);border-radius:12px;padding:20px;margin:20px 0}}
-.extension-box h3{{color:#22c55e;margin:0 0 8px 0;font-size:16px}}
-.extension-box p{{color:#94a3b8;margin:0;font-size:13px}}
-.warning{{background:rgba(234,179,8,0.1);border:1px solid rgba(234,179,8,0.3);border-radius:8px;padding:12px;margin-top:16px;font-size:12px;color:#eab308}}
-.icon{{width:48px;height:48px;margin:0 auto 16px}}
+.info-box{{background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.3);border-radius:12px;padding:20px;margin:20px 0}}
+.info-box h3{{color:#22c55e;margin:0 0 8px 0;font-size:16px}}
+.info-box p{{color:#94a3b8;margin:0;font-size:13px}}
 .spinner{{width:24px;height:24px;border:3px solid rgba(255,255,255,0.2);border-top-color:#3b82f6;border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 16px}}
 @keyframes spin{{to{{transform:rotate(360deg)}}}}
 </style>
@@ -560,7 +334,7 @@ body{{margin:0;padding:20px;font-family:system-ui,-apple-system,sans-serif;backg
 Open {tool_name}
 </a>
 
-{"<div class='extension-box'><h3>🧩 For Auto-Login</h3><p>Install the browser extension from your Profile page for automatic credential filling.</p></div>" if has_credentials else ""}
+{"<div class='info-box'><h3>🔒 Secure Access</h3><p>Use the gateway from your dashboard for automatic credential handling.</p></div>" if has_credentials else ""}
 
 <a href="/" class="btn btn-secondary">
 ← Return to Dashboard
@@ -578,4 +352,3 @@ setTimeout(function() {{
 </html>'''
     
     return HTMLResponse(content=html)
-

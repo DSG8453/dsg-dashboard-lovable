@@ -1,11 +1,8 @@
-import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import {
   User,
@@ -15,54 +12,14 @@ import {
   Edit,
   Key,
   Bell,
-  Puzzle,
-  Check,
-  Copy,
   ExternalLink,
 } from "lucide-react";
 
 export const ProfilePage = ({ currentUser }) => {
-  const [extensionId, setExtensionId] = useState("");
-  const [isExtensionSaved, setIsExtensionSaved] = useState(false);
-
-  // Load saved extension ID on mount
-  useEffect(() => {
-    const savedId = localStorage.getItem('dsg_extension_id');
-    if (savedId) {
-      setExtensionId(savedId);
-      setIsExtensionSaved(true);
-    }
-  }, []);
-
   const handleEditProfile = () => {
     toast.info("Edit Profile", {
       description: "Profile editing functionality - coming soon!",
     });
-  };
-
-  const handleSaveExtensionId = () => {
-    if (!extensionId.trim()) {
-      toast.error("Please enter your Extension ID");
-      return;
-    }
-    
-    localStorage.setItem('dsg_extension_id', extensionId.trim());
-    setIsExtensionSaved(true);
-    toast.success("Extension ID Saved!", {
-      description: "You can now use auto-login for tools",
-    });
-  };
-
-  const handleClearExtensionId = () => {
-    localStorage.removeItem('dsg_extension_id');
-    setExtensionId("");
-    setIsExtensionSaved(false);
-    toast.info("Extension ID Cleared");
-  };
-
-  const copyExtensionId = () => {
-    navigator.clipboard.writeText(extensionId);
-    toast.success("Extension ID copied to clipboard");
   };
 
   const getRoleBadgeVariant = (role) => {
@@ -222,129 +179,49 @@ export const ProfilePage = ({ currentUser }) => {
         </Card>
       </div>
 
-      {/* Browser Extension Card */}
+      {/* Security Info Card */}
       <Card className="border-2 border-border/50 shadow-card">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Puzzle className="h-5 w-5" />
-            Browser Extension Setup
+            <Shield className="h-5 w-5" />
+            Tool Access Security
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            Connect your browser extension to enable secure auto-login for assigned tools.
-            The extension will be automatically installed via Google Workspace policy.
+            When you access tools through the dashboard, credentials are handled securely:
           </p>
-
-          {/* Extension ID Input */}
-          <div className="space-y-2">
-            <Label htmlFor="extensionId">Extension ID</Label>
-            <div className="flex gap-2">
-              <Input
-                id="extensionId"
-                placeholder="Enter your Chrome Extension ID"
-                value={extensionId}
-                onChange={(e) => {
-                  setExtensionId(e.target.value);
-                  setIsExtensionSaved(false);
-                }}
-                className="flex-1"
-              />
-              {isExtensionSaved && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={copyExtensionId}
-                  title="Copy ID"
-                >
-                  <Copy className="h-4 w-4" />
-                </Button>
-              )}
-            </div>
-          </div>
-
-          {/* Save / Clear Buttons */}
-          <div className="flex gap-2">
-            <Button
-              variant={isExtensionSaved ? "outline" : "gradient"}
-              className="flex-1 gap-2"
-              onClick={handleSaveExtensionId}
-              disabled={!extensionId.trim() || isExtensionSaved}
-            >
-              {isExtensionSaved ? (
-                <>
-                  <Check className="h-4 w-4 text-success" />
-                  Connected
-                </>
-              ) : (
-                "Connect Extension"
-              )}
-            </Button>
-            {isExtensionSaved && (
-              <Button
-                variant="destructive"
-                onClick={handleClearExtensionId}
-              >
-                Disconnect
-              </Button>
-            )}
-          </div>
-
-          {/* Connected Status */}
-          {isExtensionSaved && (
-            <div className="p-3 rounded-lg bg-success/10 border border-success/20">
-              <p className="text-sm text-success font-medium">
-                ✅ Extension Connected
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Auto-login is enabled for your assigned tools
-              </p>
-            </div>
-          )}
-
-          {/* Enterprise Deployment Info */}
-          {currentUser?.role === "Super Administrator" && (
-            <div className="p-4 rounded-lg bg-muted border border-border">
-              <h4 className="font-medium flex items-center gap-2 mb-2">
-                <Shield className="h-4 w-4 text-primary" />
-                Enterprise Deployment (IT Admin)
-              </h4>
-              
-              <a
-                href="https://chrome.google.com/webstore"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-sm text-primary hover:underline flex items-center gap-1"
-              >
-                Chrome Web Store
-                <ExternalLink className="h-3 w-3" />
-              </a>
-
-              <div className="text-xs text-muted-foreground space-y-1 mt-2">
-                <p className="font-medium">Google Workspace Deployment:</p>
-                <ul className="list-disc list-inside space-y-1 pl-2">
-                  <li>Go to <code className="bg-muted px-1 rounded">admin.google.com</code></li>
-                  <li>Devices → Chrome → Apps & extensions</li>
-                  <li>Add extension with update URL below</li>
-                </ul>
-                <div className="mt-2 p-2 bg-background rounded border">
-                  <code className="text-[10px] break-all select-all">
-                    {window.location.origin}/extension-update.xml
-                  </code>
-                </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="p-4 rounded-lg bg-muted/50 border border-border">
+              <div className="flex items-center gap-2 mb-2">
+                <Shield className="h-5 w-5 text-green-500" />
+                <h4 className="font-medium">Encrypted Storage</h4>
               </div>
+              <p className="text-xs text-muted-foreground">
+                All credentials are encrypted and stored securely in Google Secret Manager
+              </p>
             </div>
-          )}
-
-          {/* Quick Help */}
-          <div className="p-3 rounded-lg bg-muted/50 text-xs">
-            <p className="font-medium mb-2">Not seeing the extension?</p>
-            <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
-              <li>Sign into Chrome with your <strong>company Google account</strong></li>
-              <li>Go to <code className="bg-muted px-1 rounded">chrome://extensions</code></li>
-              <li>Look for "DSG Transport Secure Login"</li>
-              <li>If missing, contact your IT administrator</li>
-            </ol>
+            
+            <div className="p-4 rounded-lg bg-muted/50 border border-border">
+              <div className="flex items-center gap-2 mb-2">
+                <Key className="h-5 w-5 text-blue-500" />
+                <h4 className="font-medium">Zero Visibility</h4>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Passwords are never visible in plain text - only Super Admins can manage them
+              </p>
+            </div>
+            
+            <div className="p-4 rounded-lg bg-muted/50 border border-border">
+              <div className="flex items-center gap-2 mb-2">
+                <User className="h-5 w-5 text-purple-500" />
+                <h4 className="font-medium">Role-Based Access</h4>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                You only see tools that have been specifically assigned to you
+              </p>
+            </div>
           </div>
         </CardContent>
       </Card>

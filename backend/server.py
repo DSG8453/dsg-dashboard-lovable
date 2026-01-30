@@ -1,7 +1,6 @@
 from fastapi import FastAPI, Depends, HTTPException, status, WebSocket, WebSocketDisconnect, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer
-from fastapi.responses import FileResponse
 from contextlib import asynccontextmanager
 import os
 from dotenv import load_dotenv
@@ -65,30 +64,6 @@ app.include_router(gateway_router, prefix="/api/gateway", tags=["Tool Gateway"])
 @app.get("/api/health")
 async def health_check():
     return {"status": "healthy", "service": "DSG Transport API"}
-
-
-@app.get("/api/download/extension")
-async def download_extension():
-    """Download the DSG Transport browser extension ZIP file"""
-    from fastapi.responses import Response
-    
-    file_path = os.path.join(os.path.dirname(__file__), "browser-extension.zip")
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="Extension file not found")
-    
-    # Read file and return with explicit download headers
-    with open(file_path, "rb") as f:
-        file_content = f.read()
-    
-    return Response(
-        content=file_content,
-        media_type="application/octet-stream",
-        headers={
-            "Content-Disposition": "attachment; filename=dsg-transport-extension.zip",
-            "Content-Length": str(len(file_content)),
-            "Cache-Control": "no-cache"
-        }
-    )
 
 
 # WebSocket endpoint for real-time updates
