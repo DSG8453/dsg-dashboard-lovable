@@ -4,8 +4,6 @@
 (function() {
   'use strict';
   
-  console.log('[DSG Extension] Content script loaded on:', window.location.href);
-  
   // Show loading overlay immediately if we have pending login
   let loadingOverlay = null;
   
@@ -17,14 +15,9 @@
   }
   
   function initAutoFill() {
-    console.log('[DSG Extension] Initializing auto-fill on:', window.location.href);
-    
     // Check for pending login and fill immediately if found
     chrome.runtime.sendMessage({ action: 'GET_PENDING_LOGIN' }, (pending) => {
-      console.log('[DSG Extension] Got pending login response:', pending ? 'YES' : 'NO');
-      
       if (chrome.runtime.lastError) {
-        console.log('[DSG Extension] Error:', chrome.runtime.lastError.message);
         return;
       }
       
@@ -33,7 +26,6 @@
         showLoadingOverlay(pending.toolName);
         
         // Fill credentials directly with the data we have
-        console.log('[DSG Extension] Filling credentials immediately...');
         fillCredentialsWithData(pending);
       }
     });
@@ -41,34 +33,17 @@
   
   // Fill credentials with provided data (doesn't fetch from storage again)
   function fillCredentialsWithData(creds) {
-    console.log('[DSG Extension] fillCredentialsWithData called with:', {
-      toolName: creds.toolName,
-      url: creds.url,
-      usernameField: creds.usernameField,
-      passwordField: creds.passwordField,
-      hasUsername: !!creds.username,
-      hasPassword: !!creds.password
-    });
-    
     // Try multiple times with delays
     let attempts = 0;
     const maxAttempts = 10;
     
     const tryFill = () => {
       attempts++;
-      console.log(`[DSG Extension] Fill attempt ${attempts}/${maxAttempts}`);
       
       const usernameInput = findUsernameField(creds.usernameField);
       const passwordInput = findPasswordField(creds.passwordField);
       
-      console.log('[DSG Extension] Found fields:', {
-        username: usernameInput ? (usernameInput.name || usernameInput.id || 'found') : 'NOT FOUND',
-        password: passwordInput ? (passwordInput.name || passwordInput.id || 'found') : 'NOT FOUND'
-      });
-      
       if (usernameInput && passwordInput) {
-        console.log('[DSG Extension] Both fields found, filling...');
-        
         // Disable password save prompt
         disablePasswordSavePrompt(usernameInput, passwordInput);
         
@@ -78,20 +53,16 @@
         // Fill password after short delay
         setTimeout(() => {
           fillField(passwordInput, creds.password);
-          console.log('[DSG Extension] Credentials filled!');
           
           // Auto-click login button with enhanced submission
           setTimeout(() => {
             const loginButton = findLoginButton();
             if (loginButton) {
-              console.log('[DSG Extension] Submitting form (stealth mode)...');
-              
               // Use enhanced submit that bypasses password save
               submitFormStealthily(usernameInput, passwordInput, loginButton, creds);
               
               setTimeout(hideLoadingOverlay, 1500);
             } else {
-              console.log('[DSG Extension] No login button found');
               showNotification('✅ Credentials filled - Click login to continue', 'success');
               hideLoadingOverlay();
             }
@@ -105,7 +76,6 @@
       if (attempts < maxAttempts) {
         setTimeout(tryFill, 500);
       } else {
-        console.log('[DSG Extension] Max attempts reached, fields not found');
         showNotification('⚠️ Could not find login fields. Please login manually.', 'warning');
         hideLoadingOverlay();
       }
@@ -192,8 +162,6 @@
     requestAnimationFrame(() => {
       loadingOverlay.style.opacity = '1';
     });
-    
-    console.log('[DSG Extension] Loading overlay shown');
   }
   
   function hideLoadingOverlay() {
@@ -208,33 +176,19 @@
   }
   
   function checkAndFillCredentials() {
-    console.log('[DSG Extension] checkAndFillCredentials called on:', window.location.href);
-    
     chrome.runtime.sendMessage({ action: 'GET_PENDING_LOGIN' }, (pending) => {
       if (chrome.runtime.lastError) {
-        console.log('[DSG Extension] Error getting pending login:', chrome.runtime.lastError.message);
         hideLoadingOverlay();
         return;
       }
       
       if (!pending) {
-        console.log('[DSG Extension] No pending login data found in storage');
         hideLoadingOverlay();
         return;
       }
       
-      console.log('[DSG Extension] Found pending login:', {
-        toolName: pending.toolName,
-        url: pending.url,
-        usernameField: pending.usernameField,
-        passwordField: pending.passwordField,
-        hasUsername: !!pending.username,
-        hasPassword: !!pending.password
-      });
-      
       // Check if credentials are still fresh (< 5 minutes)
       if (Date.now() - pending.timestamp > 5 * 60 * 1000) {
-        console.log('[DSG Extension] Pending login expired');
         chrome.runtime.sendMessage({ action: 'CLEAR_PENDING_LOGIN' });
         hideLoadingOverlay();
         return;
@@ -246,14 +200,10 @@
   }
   
   function fillCredentials(creds) {
-    console.log('[DSG Extension] Attempting to fill credentials...');
-    
     const usernameInput = findUsernameField(creds.usernameField);
     const passwordInput = findPasswordField(creds.passwordField);
     
     if (usernameInput && passwordInput) {
-      console.log('[DSG Extension] Found login fields, filling...');
-      
       // IMPORTANT: Disable Chrome's password save prompt
       disablePasswordSavePrompt(usernameInput, passwordInput);
       
@@ -268,35 +218,29 @@
         chrome.runtime.sendMessage({ action: 'CLEAR_PENDING_LOGIN' });
         
         // Auto-click login button after a brief delay (stealth mode)
-          setTimeout(() => {
-            const loginButton = findLoginButton();
-            if (loginButton) {
-              console.log('[DSG Extension] Found login button, using stealth submission...');
-              
-              // Use stealth submission to bypass password save prompt
-              submitFormStealthily(usernameInput, passwordInput, loginButton, creds);
-              
-              console.log('[DSG Extension] Stealth auto-login initiated!');
-              
-              // Hide overlay after a short delay (let the page redirect)
-              setTimeout(hideLoadingOverlay, 1500);
-              
-            } else {
-              console.log('[DSG Extension] No login button found, credentials filled');
-              showNotification('✅ Credentials filled - Click login to continue', 'success');
-              hideLoadingOverlay();
-              
-              chrome.runtime.sendMessage({ 
-                action: 'LOGIN_SUCCESS', 
-                toolName: creds.toolName 
-              });
-            }
-          }, 300);
+        setTimeout(() => {
+          const loginButton = findLoginButton();
+          if (loginButton) {
+            // Use stealth submission to bypass password save prompt
+            submitFormStealthily(usernameInput, passwordInput, loginButton, creds);
+            
+            // Hide overlay after a short delay (let the page redirect)
+            setTimeout(hideLoadingOverlay, 1500);
+            
+          } else {
+            showNotification('✅ Credentials filled - Click login to continue', 'success');
+            hideLoadingOverlay();
+            
+            chrome.runtime.sendMessage({ 
+              action: 'LOGIN_SUCCESS', 
+              toolName: creds.toolName 
+            });
+          }
+        }, 300);
         
       }, 200);
       
     } else {
-      console.log('[DSG Extension] Could not find login fields, retrying...');
       // Retry a few times with increasing delays
       retryFillCredentials(creds, 1);
     }
@@ -326,14 +270,7 @@
     // Method C: Remove any data Chrome uses to detect login forms
     if (form) {
       form.setAttribute('autocomplete', 'off');
-      
-      // Try to remove action temporarily (will use current page)
-      const originalAction = form.action;
-      const originalMethod = form.method;
     }
-    
-    // Now submit the form
-    console.log('[DSG Extension] Clicking button with scrambled fields...');
     
     // Use requestAnimationFrame to ensure DOM updates are processed
     requestAnimationFrame(() => {
@@ -353,7 +290,7 @@
                 form.submit();
               }
             } catch (e) {
-              console.log('[DSG Extension] Form submit fallback failed:', e);
+              // Silent fail - button click should work
             }
           }
         }, 300);
@@ -377,8 +314,6 @@
       action: 'LOGIN_SUCCESS', 
       toolName: creds.toolName 
     });
-    
-    console.log('[DSG Extension] Stealth form submission initiated!');
   }
   
   // Find the login/submit button
@@ -387,13 +322,6 @@
       // Standard buttons
       'button[type="submit"]',
       'input[type="submit"]',
-      // Text-based matching
-      'button:contains("Sign In")',
-      'button:contains("Log In")',
-      'button:contains("Login")',
-      'button:contains("Submit")',
-      'button:contains("Continue")',
-      'button:contains("Next")',
       // ID/Name based
       'button[id*="login" i]',
       'button[id*="signin" i]',
@@ -426,13 +354,9 @@
     // First try standard selectors
     for (const selector of buttonSelectors) {
       try {
-        // Skip :contains pseudo-selector (not standard CSS)
-        if (selector.includes(':contains')) continue;
-        
         const elements = document.querySelectorAll(selector);
         for (const el of elements) {
           if (isVisible(el) && isLikelyLoginButton(el)) {
-            console.log('[DSG Extension] Found login button via selector:', selector);
             return el;
           }
         }
@@ -451,7 +375,6 @@
       
       for (const keyword of loginKeywords) {
         if (text.includes(keyword) || ariaLabel.includes(keyword)) {
-          console.log('[DSG Extension] Found login button via text match:', keyword);
           return btn;
         }
       }
@@ -463,7 +386,6 @@
       if (form.querySelector('input[type="password"]')) {
         const submitBtn = form.querySelector('button, input[type="submit"]');
         if (submitBtn && isVisible(submitBtn)) {
-          console.log('[DSG Extension] Found submit button in password form');
           return submitBtn;
         }
       }
@@ -486,14 +408,10 @@
   
   // Prevent Chrome from showing "Save Password?" prompt
   function disablePasswordSavePrompt(usernameInput, passwordInput) {
-    console.log('[DSG Extension] Disabling password save prompt (enhanced)...');
-    
     // Method 1: Randomize field names to confuse password managers
     const randomSuffix = `_dsg_${Date.now()}_${Math.random().toString(36).slice(2)}`;
     const originalUserName = usernameInput.name;
     const originalPassName = passwordInput.name;
-    const originalUserAuto = usernameInput.getAttribute('autocomplete');
-    const originalPassAuto = passwordInput.getAttribute('autocomplete');
     
     // Method 2: Set autocomplete attributes aggressively
     usernameInput.setAttribute('autocomplete', 'off');
@@ -516,14 +434,11 @@
       form.setAttribute('data-turbo', 'false'); // Disable Turbo submit
       
       // Method 4: Temporarily change field names before submit
-      // This prevents Chrome from associating the fields with a login
       const preventSaveHandler = function(e) {
-        // Change names right before submit to break password manager detection
         usernameInput.name = 'dsg_user' + randomSuffix;
         passwordInput.name = 'dsg_pass' + randomSuffix;
         passwordInput.setAttribute('autocomplete', 'new-password');
         
-        // Restore original names after a micro-delay (form already submitted)
         setTimeout(() => {
           usernameInput.name = originalUserName;
           passwordInput.name = originalPassName;
@@ -534,7 +449,6 @@
     }
     
     // Method 5: Create hidden dummy fields BEFORE the real fields
-    // Password managers often grab the first matching fields
     const dummyContainer = document.createElement('div');
     dummyContainer.id = 'dsg-dummy-fields';
     dummyContainer.setAttribute('aria-hidden', 'true');
@@ -546,7 +460,6 @@
       <input type="password" name="pwd" autocomplete="current-password" tabindex="-1">
     `;
     
-    // Insert at the beginning of the form or body
     if (form) {
       form.insertBefore(dummyContainer, form.firstChild);
     } else {
@@ -554,7 +467,6 @@
     }
     
     // Method 6: Convert password field temporarily to prevent detection
-    // Fill as text, then convert back
     const originalType = passwordInput.type;
     passwordInput.type = 'text';
     passwordInput.setAttribute('data-dsg-real-type', 'password');
@@ -569,16 +481,13 @@
       passwordInput.removeAttribute('readonly');
       passwordInput.type = originalType;
     }, 100);
-    
-    console.log('[DSG Extension] Enhanced password save prompt prevention applied');
   }
   
   function retryFillCredentials(creds, attempt) {
     const maxAttempts = 5;
-    const delay = attempt * 1000; // Increasing delay
+    const delay = attempt * 1000;
     
     if (attempt > maxAttempts) {
-      console.log('[DSG Extension] Max retries reached, showing manual login notice');
       showNotification('⚠️ Could not auto-fill. Please login manually.', 'warning');
       hideLoadingOverlay();
       chrome.runtime.sendMessage({ 
@@ -594,7 +503,6 @@
       const passwordInput = findPasswordField(creds.passwordField);
       
       if (usernameInput && passwordInput) {
-        // Apply password save prevention on retry as well
         disablePasswordSavePrompt(usernameInput, passwordInput);
         
         fillField(usernameInput, creds.username);
@@ -603,11 +511,9 @@
           
           chrome.runtime.sendMessage({ action: 'CLEAR_PENDING_LOGIN' });
           
-            // Auto-click login button with stealth mode
           setTimeout(() => {
             const loginButton = findLoginButton();
             if (loginButton) {
-              console.log('[DSG Extension] Submitting form (stealth mode) on retry...');
               submitFormStealthily(usernameInput, passwordInput, loginButton, creds);
               setTimeout(hideLoadingOverlay, 1500);
             } else {
@@ -618,29 +524,22 @@
           }, 300);
         }, 200);
       } else {
-        console.log(`[DSG Extension] Retry ${attempt}/${maxAttempts}...`);
         retryFillCredentials(creds, attempt + 1);
       }
     }, delay);
   }
   
   function findUsernameField(preferredName) {
-    console.log('[DSG Extension] Looking for username field with preferredName:', preferredName);
-    
-    // Try specific field name first (exact match)
     const selectors = [
       `input[name="${preferredName}"]`,
       `input[id="${preferredName}"]`,
-      // Handle ASP.NET encoded names ($ becomes _)
       `input[name="${preferredName.replace(/\$/g, '_')}"]`,
       `input[id="${preferredName.replace(/\$/g, '_')}"]`,
-      // Partial match for ASP.NET
       `input[name*="txtUserName" i]`,
       `input[name*="txtUser" i]`,
       `input[name*="UserName" i]`,
       `input[id*="txtUserName" i]`,
       `input[id*="UserName" i]`,
-      // Common username/email field patterns
       'input[name*="user" i]',
       'input[name*="email" i]',
       'input[name*="login" i]',
@@ -656,7 +555,6 @@
       'input[placeholder*="login" i]',
       'input[name="Email"]',
       'input[name="LOGIN_ID"]',
-      // Generic text input in login forms
       'form input[type="text"]:first-of-type'
     ];
     
@@ -664,7 +562,6 @@
       try {
         const input = document.querySelector(selector);
         if (input && isVisible(input)) {
-          console.log('[DSG Extension] Found username field with selector:', selector);
           return input;
         }
       } catch (e) {}
@@ -674,30 +571,23 @@
     const allInputs = document.querySelectorAll('input[type="text"], input:not([type])');
     for (const input of allInputs) {
       if (isVisible(input) && !input.type.includes('hidden')) {
-        console.log('[DSG Extension] Found username field (fallback):', input.name || input.id);
         return input;
       }
     }
     
-    console.log('[DSG Extension] No username field found');
     return null;
   }
   
   function findPasswordField(preferredName) {
-    console.log('[DSG Extension] Looking for password field with preferredName:', preferredName);
-    
     const selectors = [
       `input[name="${preferredName}"]`,
       `input[id="${preferredName}"]`,
-      // Handle ASP.NET encoded names
       `input[name="${preferredName.replace(/\$/g, '_')}"]`,
       `input[id="${preferredName.replace(/\$/g, '_')}"]`,
-      // ASP.NET specific
       `input[name*="txtPassword" i]`,
       `input[name*="txtPass" i]`,
       `input[id*="txtPassword" i]`,
       `input[id*="Password" i]`,
-      // Standard password field
       'input[type="password"]',
       'input[name*="pass" i]',
       'input[name*="pwd" i]',
@@ -712,13 +602,11 @@
       try {
         const input = document.querySelector(selector);
         if (input && isVisible(input)) {
-          console.log('[DSG Extension] Found password field with selector:', selector);
           return input;
         }
       } catch (e) {}
     }
     
-    console.log('[DSG Extension] No password field found');
     return null;
   }
   
@@ -838,7 +726,6 @@
   const observer = new MutationObserver(() => {
     if (window.location.href !== lastUrl) {
       lastUrl = window.location.href;
-      console.log('[DSG Extension] URL changed, rechecking...');
       setTimeout(checkAndFillCredentials, 1000);
     }
   });

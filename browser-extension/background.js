@@ -8,11 +8,6 @@ let pendingLogins = {};
 // Listen for messages from DSG Transport dashboard (external)
 chrome.runtime.onMessageExternal.addListener(
   (request, sender, sendResponse) => {
-    console.log('[DSG Extension] ===== EXTERNAL MESSAGE RECEIVED =====');
-    console.log('[DSG Extension] Action:', request.action);
-    console.log('[DSG Extension] Sender:', sender.origin || sender.url);
-    console.log('[DSG Extension] Request keys:', Object.keys(request));
-    
     // Dynamically capture the backend URL from the sender's origin
     if (sender.origin) {
       setBackendUrl(sender.origin);
@@ -25,20 +20,17 @@ chrome.runtime.onMessageExternal.addListener(
     
     // NEW: Secure login with encrypted payload
     if (request.action === 'DSG_SECURE_LOGIN') {
-      console.log('[DSG Extension] Processing DSG_SECURE_LOGIN...');
       handleSecureLogin(request, sendResponse);
       return true; // Keep channel open for async response
     }
     
     // Legacy support (will be removed)
     if (request.action === 'DSG_AUTO_LOGIN') {
-      console.log('[DSG Extension] Processing DSG_AUTO_LOGIN (legacy)...');
       handleAutoLogin(request, sendResponse);
       return true;
     }
     
     if (request.action === 'DSG_CHECK_EXTENSION') {
-      console.log('[DSG Extension] Responding to DSG_CHECK_EXTENSION');
       sendResponse({ 
         installed: true, 
         version: chrome.runtime.getManifest().version,
@@ -48,15 +40,12 @@ chrome.runtime.onMessageExternal.addListener(
       return true;
     }
     
-    console.log('[DSG Extension] Unknown action:', request.action);
     return false;
   }
 );
 
 // Listen for internal messages from content scripts
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  console.log('[DSG Extension] Internal message:', request.action);
-  
   if (request.action === 'GET_PENDING_LOGIN') {
     // Check if there's a pending login for this tab
     chrome.storage.local.get('pendingLogin', (data) => {
@@ -80,12 +69,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
   
   if (request.action === 'LOGIN_SUCCESS') {
-    console.log('[DSG Extension] Login successful for:', request.toolName);
     sendResponse({ acknowledged: true });
   }
   
   if (request.action === 'LOGIN_FAILED') {
-    console.log('[DSG Extension] Login failed:', request.reason);
+    console.warn('[DSG] Login failed:', request.reason);
     sendResponse({ acknowledged: true });
   }
   
@@ -95,16 +83,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 // NEW: Handle secure login with encrypted payload
 async function handleSecureLogin(request, sendResponse) {
   try {
-    console.log('[DSG Extension] ===== STARTING SECURE LOGIN =====');
-    console.log('[DSG Extension] Tool:', request.toolName);
-    console.log('[DSG Extension] Login URL:', request.loginUrl);
-    console.log('[DSG Extension] Has encrypted payload:', !!request.encryptedPayload);
-    console.log('[DSG Extension] Encrypted payload length:', request.encryptedPayload?.length || 0);
-    
     // Get the backend URL dynamically (captured from sender origin)
     const backendUrl = getDynamicBackendUrl();
-    console.log('[DSG Extension] Backend URL:', backendUrl);
-    console.log('[DSG Extension] Calling decrypt API...');
     
     let decryptResponse;
     try {
@@ -119,25 +99,17 @@ async function handleSecureLogin(request, sendResponse) {
         })
       });
     } catch (fetchError) {
-      console.error('[DSG Extension] Fetch error:', fetchError.message);
+      console.error('[DSG] Network error:', fetchError.message);
       throw new Error('Network error calling decrypt API: ' + fetchError.message);
     }
     
-    console.log('[DSG Extension] Decrypt response status:', decryptResponse.status);
-    
     if (!decryptResponse.ok) {
       const errorText = await decryptResponse.text();
-      console.error('[DSG Extension] Decrypt HTTP error:', errorText);
+      console.error('[DSG] Decrypt error:', errorText);
       throw new Error('Decrypt API returned ' + decryptResponse.status + ': ' + errorText);
     }
     
     const decrypted = await decryptResponse.json();
-    console.log('[DSG Extension] Decrypt result:', { 
-      success: decrypted.success, 
-      hasUsername: !!decrypted.u, 
-      hasPassword: !!decrypted.p,
-      error: decrypted.error || null
-    });
     
     if (!decrypted.success) {
       throw new Error(decrypted.error || 'Decryption failed - check EXTENSION_KEY env variable');
@@ -159,40 +131,19 @@ async function handleSecureLogin(request, sendResponse) {
       timestamp: Date.now()
     };
     
-    console.log('[DSG Extension] Storing pending login:', {
-      url: loginData.url,
-      usernameField: loginData.usernameField,
-      passwordField: loginData.passwordField,
-      toolName: loginData.toolName,
-      hasCredentials: !!(loginData.username && loginData.password)
-    });
-    
     // Store the pending login
     await chrome.storage.local.set({ pendingLogin: loginData });
-    console.log('[DSG Extension] Pending login stored successfully');
-    
-    // Verify storage
-    const stored = await chrome.storage.local.get('pendingLogin');
-    console.log('[DSG Extension] Storage verified:', {
-      hasPending: !!stored.pendingLogin,
-      hasUsername: !!stored.pendingLogin?.username,
-      hasPassword: !!stored.pendingLogin?.password
-    });
     
     // Open the login URL in a new tab
-    console.log('[DSG Extension] Opening tab:', request.loginUrl);
     const tab = await chrome.tabs.create({ 
       url: request.loginUrl,
       active: true
     });
     
-    console.log('[DSG Extension] Tab opened successfully:', tab.id);
-    
     // Clear credentials from memory after they're used
     setTimeout(() => {
       loginData.username = null;
       loginData.password = null;
-      console.log('[DSG Extension] Credentials cleared from memory');
     }, 15000);
     
     sendResponse({ 
@@ -202,9 +153,7 @@ async function handleSecureLogin(request, sendResponse) {
     });
     
   } catch (error) {
-    console.error('[DSG Extension] ===== SECURE LOGIN ERROR =====');
-    console.error('[DSG Extension] Error:', error.message);
-    console.error('[DSG Extension] Stack:', error.stack);
+    console.error('[DSG] Secure login error:', error.message);
     sendResponse({ 
       success: false, 
       error: error.message 
@@ -215,8 +164,6 @@ async function handleSecureLogin(request, sendResponse) {
 // Legacy: Handle auto-login request (for backwards compatibility)
 async function handleAutoLogin(request, sendResponse) {
   try {
-    console.log('[DSG Extension] Starting auto-login for:', request.toolName);
-    
     const loginData = {
       url: request.loginUrl,
       username: request.username,
@@ -236,8 +183,6 @@ async function handleAutoLogin(request, sendResponse) {
       active: true
     });
     
-    console.log('[DSG Extension] Opened tab:', tab.id, 'URL:', request.loginUrl);
-    
     sendResponse({ 
       success: true, 
       tabId: tab.id,
@@ -245,7 +190,7 @@ async function handleAutoLogin(request, sendResponse) {
     });
     
   } catch (error) {
-    console.error('[DSG Extension] Error:', error);
+    console.error('[DSG] Auto-login error:', error.message);
     sendResponse({ 
       success: false, 
       error: error.message 
@@ -254,11 +199,7 @@ async function handleAutoLogin(request, sendResponse) {
 }
 
 // Get backend URL dynamically from the page that triggered the login
-// This makes the extension work with ANY deployment domain
 function getBackendUrl() {
-  // Check if we have a stored backend URL from the last dashboard interaction
-  // The dashboard sends its origin when communicating with the extension
-  // Default fallback URLs in priority order
   const fallbackUrls = [
     'https://portal.dsgtransport.net',
     'https://api.portal.dsgtransport.net',
@@ -268,7 +209,6 @@ function getBackendUrl() {
     'https://app.dsgtransport.com'
   ];
   
-  // Return the production URL as default
   return fallbackUrls[0];
 }
 
@@ -277,8 +217,7 @@ let dynamicBackendUrl = null;
 
 function setBackendUrl(url) {
   if (url && url.includes('dsgtransport')) {
-    dynamicBackendUrl = url.replace(/\/$/, ''); // Remove trailing slash
-    console.log('[DSG Extension] Backend URL set to:', dynamicBackendUrl);
+    dynamicBackendUrl = url.replace(/\/$/, '');
   }
 }
 
@@ -289,7 +228,6 @@ function getDynamicBackendUrl() {
 // Check if two URLs match (same domain or URL contains pending URL domain)
 function isUrlMatch(pendingUrl, currentUrl) {
   if (!pendingUrl || !currentUrl) {
-    console.log('[DSG Extension] URL match failed - missing URL', { pendingUrl, currentUrl });
     return false;
   }
   
@@ -299,7 +237,6 @@ function isUrlMatch(pendingUrl, currentUrl) {
     
     // Exact hostname match
     if (pending.hostname === current.hostname) {
-      console.log('[DSG Extension] URL match - exact hostname');
       return true;
     }
     
@@ -308,20 +245,16 @@ function isUrlMatch(pendingUrl, currentUrl) {
     const currentDomain = current.hostname.split('.').slice(-2).join('.');
     
     if (pendingDomain === currentDomain) {
-      console.log('[DSG Extension] URL match - same domain');
       return true;
     }
     
     // Check if current URL hostname contains pending domain
     if (current.hostname.includes(pending.hostname) || pending.hostname.includes(current.hostname)) {
-      console.log('[DSG Extension] URL match - partial hostname');
       return true;
     }
     
-    console.log('[DSG Extension] URL match failed', { pendingDomain, currentDomain });
     return false;
   } catch (e) {
-    console.log('[DSG Extension] URL match error:', e);
     return false;
   }
 }
@@ -334,7 +267,6 @@ setInterval(() => {
       // Expire after 2 minutes (shorter for security)
       if (age > 2 * 60 * 1000) {
         chrome.storage.local.remove('pendingLogin');
-        console.log('[DSG Extension] Cleared expired login data');
       }
     }
   });
@@ -344,11 +276,7 @@ setInterval(() => {
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.status === 'complete' && tab.url) {
     chrome.storage.local.get('pendingLogin', (data) => {
-      if (data.pendingLogin && isUrlMatch(data.pendingLogin.url, tab.url)) {
-        console.log('[DSG Extension] Tab loaded, re-checking for credential fill');
-      }
+      // Content script handles the rest
     });
   }
 });
-
-console.log('[DSG Extension] Secure background service worker started');
