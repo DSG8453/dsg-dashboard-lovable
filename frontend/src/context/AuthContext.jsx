@@ -121,7 +121,7 @@ export const AuthProvider = ({ children }) => {
         wsRef.current.close(1000);
       }
     };
-  }, [token, logout]);
+  }, [token, logout, TOKEN_REFRESH_INTERVAL]);
 
   // Token auto-refresh effect - keeps token fresh to prevent expiry
   useEffect(() => {
