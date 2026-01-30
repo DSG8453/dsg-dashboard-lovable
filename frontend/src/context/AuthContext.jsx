@@ -86,7 +86,7 @@ export const AuthProvider = ({ children }) => {
         clearInterval(tokenRefreshIntervalRef.current);
       }
     };
-  }, [token, logout]);
+  }, [token, logout, TOKEN_REFRESH_INTERVAL]);
 
   // Register device and check approval status
   const registerDevice = useCallback(async (currentUser) => {
