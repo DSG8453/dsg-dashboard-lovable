@@ -31,9 +31,9 @@
   function showLoadingOverlay(toolName) {
     if (loadingOverlay) return;
     
-    // 1. Autocomplete off
-    userField.setAttribute('autocomplete', 'off');
-    passField.setAttribute('autocomplete', 'new-password');
+    // Create overlay element
+    loadingOverlay = document.createElement('div');
+    loadingOverlay.id = 'dsg-loading-overlay';
     
     loadingOverlay.style.cssText = `
       position: fixed !important;
@@ -47,6 +47,16 @@
       justify-content: center !important;
       z-index: 2147483647 !important;
       opacity: 1 !important;
+    `;
+    
+    // Add loading content
+    loadingOverlay.innerHTML = `
+      <div class="dsg-loading-content">
+        <div class="dsg-loading-spinner"></div>
+        <div class="dsg-loading-logo">DSG Transport</div>
+        <div class="dsg-loading-text">Securely connecting to ${toolName || 'tool'}...</div>
+        <div class="dsg-loading-subtext">Please wait while we log you in</div>
+      </div>
     `;
     
     const style = document.createElement('style');
