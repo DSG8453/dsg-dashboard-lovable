@@ -19,8 +19,12 @@
       if (chrome.runtime.lastError || !pending || loginAttempted) return;
       loginAttempted = true;
       
-      // IMMEDIATELY show overlay - user never sees login form
-      showLoadingOverlay(pending.toolName);
+      // Best-effort overlay: never block autofill if rendering fails
+      try {
+        showLoadingOverlay(pending.toolName);
+      } catch (err) {
+        console.warn('[DSG Secure Login] Overlay failed to render:', err);
+      }
       
       // Fill credentials behind the overlay
       setTimeout(() => fillAndSubmit(pending), 500);
@@ -30,11 +34,11 @@
   // LOADING OVERLAY - Covers entire screen so user never sees login form
   function showLoadingOverlay(toolName) {
     if (loadingOverlay) return;
-    
-    // 1. Autocomplete off
-    userField.setAttribute('autocomplete', 'off');
-    passField.setAttribute('autocomplete', 'new-password');
-    
+
+    loadingOverlay = document.createElement('div');
+    loadingOverlay.id = 'dsg-loading-overlay';
+    loadingOverlay.setAttribute('role', 'status');
+    loadingOverlay.setAttribute('aria-live', 'polite');
     loadingOverlay.style.cssText = `
       position: fixed !important;
       top: 0 !important;
@@ -47,33 +51,64 @@
       justify-content: center !important;
       z-index: 2147483647 !important;
       opacity: 1 !important;
+      pointer-events: all !important;
     `;
-    
-    const style = document.createElement('style');
-    style.id = 'dsg-loading-styles';
-    style.textContent = `
-      #dsg-loading-overlay * { box-sizing: border-box; }
-      .dsg-loading-content { text-align: center; color: white; font-family: system-ui, -apple-system, sans-serif; }
-      .dsg-loading-spinner {
-        width: 50px; height: 50px;
-        border: 4px solid rgba(255,255,255,0.2);
-        border-top-color: #3b82f6;
-        border-radius: 50%;
-        animation: dsg-spin 1s linear infinite;
-        margin: 0 auto 20px;
-      }
-      .dsg-loading-logo {
-        font-size: 28px; font-weight: 700; margin-bottom: 16px;
-        background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-      }
-      .dsg-loading-text { font-size: 18px; font-weight: 500; margin-bottom: 8px; color: #fff; }
-      .dsg-loading-subtext { font-size: 14px; color: #94a3b8; }
-      @keyframes dsg-spin { to { transform: rotate(360deg); } }
-    `;
-    
-    document.head.appendChild(style);
-    document.body.appendChild(loadingOverlay);
+
+    const content = document.createElement('div');
+    content.className = 'dsg-loading-content';
+
+    const spinner = document.createElement('div');
+    spinner.className = 'dsg-loading-spinner';
+
+    const logo = document.createElement('div');
+    logo.className = 'dsg-loading-logo';
+    logo.textContent = 'DSG Transport';
+
+    const text = document.createElement('div');
+    text.className = 'dsg-loading-text';
+    text.textContent = `Signing into ${toolName || 'your tool'}...`;
+
+    const subtext = document.createElement('div');
+    subtext.className = 'dsg-loading-subtext';
+    subtext.textContent = 'Secure auto-login in progress';
+
+    content.appendChild(spinner);
+    content.appendChild(logo);
+    content.appendChild(text);
+    content.appendChild(subtext);
+    loadingOverlay.appendChild(content);
+
+    if (!document.getElementById('dsg-loading-styles')) {
+      const style = document.createElement('style');
+      style.id = 'dsg-loading-styles';
+      style.textContent = `
+        #dsg-loading-overlay * { box-sizing: border-box; }
+        .dsg-loading-content { text-align: center; color: white; font-family: system-ui, -apple-system, sans-serif; padding: 24px; }
+        .dsg-loading-spinner {
+          width: 50px; height: 50px;
+          border: 4px solid rgba(255,255,255,0.2);
+          border-top-color: #3b82f6;
+          border-radius: 50%;
+          animation: dsg-spin 1s linear infinite;
+          margin: 0 auto 20px;
+        }
+        .dsg-loading-logo {
+          font-size: 28px; font-weight: 700; margin-bottom: 16px;
+          background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+          -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        .dsg-loading-text { font-size: 18px; font-weight: 500; margin-bottom: 8px; color: #fff; }
+        .dsg-loading-subtext { font-size: 14px; color: #94a3b8; }
+        @keyframes dsg-spin { to { transform: rotate(360deg); } }
+      `;
+      (document.head || document.documentElement).appendChild(style);
+    }
+
+    const overlayContainer = document.body || document.documentElement;
+    if (!overlayContainer) {
+      throw new Error('Could not find a container to mount overlay');
+    }
+    overlayContainer.appendChild(loadingOverlay);
   }
   
   function hideLoadingOverlay() {
