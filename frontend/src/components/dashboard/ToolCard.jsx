@@ -174,6 +174,31 @@ export const ToolCard = ({ tool, onDelete, onUpdate }) => {
 
   // Legacy check function (kept for compatibility)
   const checkExtensionInstalled = autoDetectExtension;
+  
+  const verifyExtensionReachable = async (extId, timeoutMs = 2500) => {
+    if (!extId || typeof chrome === 'undefined' || !chrome.runtime) return false;
+    
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => resolve(false), timeoutMs);
+      try {
+        chrome.runtime.sendMessage(
+          extId,
+          { action: 'DSG_CHECK_EXTENSION' },
+          (response) => {
+            clearTimeout(timeout);
+            if (chrome.runtime.lastError) {
+              resolve(false);
+            } else {
+              resolve(Boolean(response?.installed));
+            }
+          }
+        );
+      } catch (err) {
+        clearTimeout(timeout);
+        resolve(false);
+      }
+    });
+  };
 
   // Handle secure tool access via browser extension
   const handleExtensionAccess = async () => {
@@ -219,6 +244,18 @@ export const ToolCard = ({ tool, onDelete, onUpdate }) => {
       return;
     }
     
+    // Guard against stale/incorrect saved extension IDs.
+    const extensionReachable = await verifyExtensionReachable(extensionId);
+    if (!extensionReachable) {
+      localStorage.removeItem('dsg_extension_id');
+      setExtensionInstalled(false);
+      setExtensionDialogOpen(true);
+      toast.error("Secure Login Extension not detected", {
+        description: "Please reconnect your extension and try again.",
+      });
+      return;
+    }
+    
     setIsAccessingTool(true);
     
     try {
@@ -234,11 +271,18 @@ export const ToolCard = ({ tool, onDelete, onUpdate }) => {
       
       // Send to extension with timeout
       if (typeof chrome !== 'undefined' && chrome.runtime) {
-        // Set timeout for extension response (3 seconds)
-        let timeoutId = setTimeout(() => {
+        let hasHandledResponse = false;
+        
+        // Give extension enough time to decrypt payload and open tab.
+        const timeoutId = setTimeout(() => {
+          if (hasHandledResponse) return;
+          hasHandledResponse = true;
           console.log('Extension timeout - using fallback');
+          toast.warning("Auto-login is taking longer than expected", {
+            description: "Opening backup access flow...",
+          });
           handleFallbackAccess();
-        }, 3000);
+        }, 12000);
         
         try {
           chrome.runtime.sendMessage(
@@ -262,10 +306,15 @@ export const ToolCard = ({ tool, onDelete, onUpdate }) => {
               toolName: response.toolName || response.payload?.toolName
             },
             (extResponse) => {
+              if (hasHandledResponse) return;
+              hasHandledResponse = true;
               clearTimeout(timeoutId); // Clear timeout since we got a response
               
               if (chrome.runtime.lastError) {
                 console.error('Extension error:', chrome.runtime.lastError);
+                toast.warning("Extension communication failed", {
+                  description: "Using backup login flow...",
+                });
                 // Fallback: use request-access flow
                 handleFallbackAccess();
                 return;
@@ -288,14 +337,24 @@ export const ToolCard = ({ tool, onDelete, onUpdate }) => {
                 }
                 setIsAccessingTool(false);
               } else {
+                if (extResponse?.error) {
+                  toast.warning("Auto-login failed", {
+                    description: `${extResponse.error} — opening backup flow.`,
+                  });
+                }
                 // Extension responded but failed - try fallback
                 handleFallbackAccess();
               }
             }
           );
         } catch (extError) {
+          if (hasHandledResponse) return;
+          hasHandledResponse = true;
           clearTimeout(timeoutId);
           console.error('Extension send error:', extError);
+          toast.warning("Extension request failed", {
+            description: "Using backup login flow...",
+          });
           handleFallbackAccess();
         }
       } else {

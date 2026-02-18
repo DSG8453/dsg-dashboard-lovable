@@ -152,7 +152,9 @@
   
   function fillAndSubmit(creds) {
     let attempts = 0;
-    const maxAttempts = 30;
+    let usernameStepCompleted = false;
+    const maxAttempts = 45;
+    const retryDelayMs = 400;
     
     const tryFill = () => {
       attempts++;
@@ -161,40 +163,79 @@
       const passField = findPasswordField(creds.passwordField);
       
       if (userField && passField) {
-        // PREVENT PASSWORD SAVE - 7 techniques
-        preventPasswordSave(userField, passField);
-        
-        // Fill username
+        completeLogin(userField, passField);
+        return;
+      }
+      
+      // Handle username-first flows (Google/Microsoft/SSO style)
+      if (!usernameStepCompleted && userField && !passField && creds.username) {
         fillInput(userField, creds.username);
+        usernameStepCompleted = true;
         
-        setTimeout(() => {
-          // Fill password
-          fillInput(passField, creds.password);
-          
-          setTimeout(() => {
-            // Find and click login button
-            const btn = findLoginButton();
-            if (btn) {
-              submitWithPasswordPrevention(userField, passField, btn);
-            } else {
-              // Try form.submit() as fallback
-              const form = userField.closest('form') || passField.closest('form');
-              if (form) {
-                scrambleFieldsBeforeSubmit(userField, passField);
-                form.submit();
-              }
-              setTimeout(hideLoadingOverlay, 1000);
-            }
-          }, 300);
-        }, 200);
+        const nextBtn = findNextButton(userField);
+        if (nextBtn) nextBtn.click();
+        else safeSubmitForm(userField.closest('form'));
         
-      } else if (attempts < maxAttempts) {
-        setTimeout(tryFill, 500);
+        if (attempts < maxAttempts) setTimeout(tryFill, 900);
+        else failLogin();
+        return;
+      }
+      
+      // Second step for username-first login pages
+      if (usernameStepCompleted && passField && !userField) {
+        completePasswordStep(passField);
+        return;
+      }
+      
+      if (attempts < maxAttempts) {
+        setTimeout(tryFill, retryDelayMs);
       } else {
-        hideLoadingOverlay();
-        chrome.runtime.sendMessage({ action: 'LOGIN_FAILED' });
+        failLogin();
       }
     };
+    
+    function completeLogin(userField, passField) {
+      preventPasswordSave(userField, passField);
+      fillInput(userField, creds.username);
+      
+      setTimeout(() => {
+        fillInput(passField, creds.password);
+        
+        setTimeout(() => {
+          const scopedForm = userField.closest('form') || passField.closest('form');
+          const btn = findLoginButton(scopedForm);
+          if (btn) {
+            submitWithPasswordPrevention(userField, passField, btn);
+          } else {
+            scrambleFieldsBeforeSubmit(userField, passField);
+            safeSubmitForm(scopedForm);
+            setTimeout(hideLoadingOverlay, 1000);
+          }
+        }, 300);
+      }, 200);
+    }
+    
+    function completePasswordStep(passField) {
+      preventPasswordSave(null, passField);
+      fillInput(passField, creds.password);
+      
+      setTimeout(() => {
+        const scopedForm = passField.closest('form');
+        const btn = findLoginButton(scopedForm);
+        if (btn) {
+          submitWithPasswordPrevention(null, passField, btn);
+        } else {
+          scrambleFieldsBeforeSubmit(null, passField);
+          safeSubmitForm(scopedForm);
+          setTimeout(hideLoadingOverlay, 1000);
+        }
+      }, 300);
+    }
+    
+    function failLogin() {
+      hideLoadingOverlay();
+      chrome.runtime.sendMessage({ action: 'LOGIN_FAILED' });
+    }
     
     tryFill();
   }
@@ -202,12 +243,14 @@
   // ============ PASSWORD SAVE PREVENTION - 7 TECHNIQUES ============
   
   function preventPasswordSave(userField, passField) {
+    if (!passField) return;
+    
     // 1. Autocomplete attributes
-    userField.setAttribute('autocomplete', 'off');
+    if (userField) userField.setAttribute('autocomplete', 'off');
     passField.setAttribute('autocomplete', 'new-password');
     
     // 2. Password manager ignore flags
-    [userField, passField].forEach(f => {
+    [userField, passField].filter(Boolean).forEach(f => {
       f.setAttribute('data-lpignore', 'true');      // LastPass
       f.setAttribute('data-1p-ignore', 'true');     // 1Password
       f.setAttribute('data-bwignore', 'true');      // Bitwarden
@@ -215,7 +258,7 @@
     });
     
     // 3. Form autocomplete
-    const form = userField.closest('form') || passField.closest('form');
+    const form = (userField && userField.closest('form')) || passField.closest('form');
     if (form) {
       form.setAttribute('autocomplete', 'off');
       form.setAttribute('data-lpignore', 'true');
@@ -228,8 +271,9 @@
       <input type="text" name="fake_email_${Date.now()}" autocomplete="username" tabindex="-1">
       <input type="password" name="fake_pass_${Date.now()}" autocomplete="current-password" tabindex="-1">
     `;
+    const ownerDoc = passField.ownerDocument || document;
     if (form) form.insertBefore(dummy, form.firstChild);
-    else document.body.insertBefore(dummy, document.body.firstChild);
+    else if (ownerDoc.body) ownerDoc.body.insertBefore(dummy, ownerDoc.body.firstChild);
     
     // 5. Temporarily convert password to text
     const origType = passField.type;
@@ -237,34 +281,38 @@
     setTimeout(() => { passField.type = origType; }, 50);
     
     // 6. Readonly during fill
-    userField.readOnly = true;
+    if (userField) userField.readOnly = true;
     passField.readOnly = true;
     setTimeout(() => {
-      userField.readOnly = false;
+      if (userField) userField.readOnly = false;
       passField.readOnly = false;
     }, 100);
     
     // 7. Blur fields
-    userField.blur();
+    if (userField) userField.blur();
     passField.blur();
   }
   
   function scrambleFieldsBeforeSubmit(userField, passField) {
+    if (!passField) return;
     const rand = '_dsg_' + Date.now() + '_' + Math.random().toString(36).slice(2);
-    userField.name = 'f_x' + rand;
-    userField.id = 'i_x' + rand;
+    if (userField) {
+      userField.name = 'f_x' + rand;
+      userField.id = 'i_x' + rand;
+    }
     passField.name = 'f_y' + rand;
     passField.id = 'i_y' + rand;
     passField.setAttribute('autocomplete', 'new-password');
   }
   
   function submitWithPasswordPrevention(userField, passField, btn) {
-    const form = userField.closest('form') || passField.closest('form');
+    if (!passField || !btn) return;
+    const form = (userField && userField.closest('form')) || passField.closest('form');
     
     // Store originals
-    const origUserName = userField.name;
+    const origUserName = userField ? userField.name : null;
     const origPassName = passField.name;
-    const origUserId = userField.id;
+    const origUserId = userField ? userField.id : null;
     const origPassId = passField.id;
     
     // Scramble before submit
@@ -279,10 +327,9 @@
       // Backup: form.submit() if click didn't navigate
       if (form) {
         setTimeout(() => {
-          if (document.contains(btn)) {
+          if (btn.isConnected) {
             try {
-              if (form.requestSubmit) form.requestSubmit(btn);
-              else form.submit();
+              safeSubmitForm(form, btn);
             } catch (e) {}
           }
         }, 400);
@@ -293,11 +340,11 @@
       
       // Restore originals (in case of validation error)
       setTimeout(() => {
-        if (document.contains(userField)) {
+        if (userField && userField.isConnected) {
           userField.name = origUserName;
           userField.id = origUserId;
         }
-        if (document.contains(passField)) {
+        if (passField.isConnected) {
           passField.name = origPassName;
           passField.id = origPassId;
         }
@@ -309,48 +356,167 @@
   
   // ============ FIELD FINDING ============
   
+  function safeSubmitForm(form, submitter = null) {
+    if (!form) return false;
+    try {
+      if (form.requestSubmit) {
+        if (submitter && form.contains(submitter)) form.requestSubmit(submitter);
+        else form.requestSubmit();
+      } else {
+        form.submit();
+      }
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+  
+  function getSearchRoots() {
+    const roots = [document];
+    const seenDocs = new Set([document]);
+    collectFrameDocuments(document, roots, seenDocs);
+    
+    const expandedRoots = [...roots];
+    roots.forEach(root => collectShadowRoots(root, expandedRoots));
+    return expandedRoots;
+  }
+  
+  function collectFrameDocuments(rootDoc, roots, seenDocs) {
+    let frames = [];
+    try {
+      frames = rootDoc.querySelectorAll('iframe, frame');
+    } catch (e) {
+      return;
+    }
+    
+    for (const frame of frames) {
+      try {
+        const frameDoc = frame.contentDocument;
+        if (frameDoc && !seenDocs.has(frameDoc)) {
+          seenDocs.add(frameDoc);
+          roots.push(frameDoc);
+          collectFrameDocuments(frameDoc, roots, seenDocs);
+        }
+      } catch (e) {
+        // Cross-origin frame access throws; skip safely.
+      }
+    }
+  }
+  
+  function collectShadowRoots(root, roots) {
+    let elements = [];
+    try {
+      elements = root.querySelectorAll('*');
+    } catch (e) {
+      return;
+    }
+    
+    for (const el of elements) {
+      if (el.shadowRoot) {
+        roots.push(el.shadowRoot);
+        collectShadowRoots(el.shadowRoot, roots);
+      }
+    }
+  }
+  
+  function querySelectorFromRoots(selectors, predicate) {
+    const roots = getSearchRoots();
+    for (const sel of selectors) {
+      for (const root of roots) {
+        try {
+          const el = root.querySelector(sel);
+          if (el && predicate(el)) return el;
+        } catch (e) {}
+      }
+    }
+    return null;
+  }
+  
+  function queryAllFromRoots(selector, predicate = () => true) {
+    const out = [];
+    const seen = new Set();
+    const roots = getSearchRoots();
+    
+    for (const root of roots) {
+      let nodes = [];
+      try {
+        nodes = root.querySelectorAll(selector);
+      } catch (e) {
+        continue;
+      }
+      for (const node of nodes) {
+        if (!seen.has(node) && predicate(node)) {
+          seen.add(node);
+          out.push(node);
+        }
+      }
+    }
+    
+    return out;
+  }
+  
+  function isUsernameLikeField(el) {
+    if (!el || el.disabled) return false;
+    const tag = (el.tagName || '').toLowerCase();
+    
+    if (tag === 'textarea') return true;
+    if (tag !== 'input') return false;
+    
+    const type = ((el.getAttribute('type') || 'text') + '').toLowerCase();
+    return !['password', 'hidden', 'submit', 'button', 'checkbox', 'radio', 'file', 'image', 'reset'].includes(type);
+  }
+  
+  function isPasswordLikeField(el) {
+    if (!el || el.disabled) return false;
+    const tag = (el.tagName || '').toLowerCase();
+    if (tag !== 'input') return false;
+    
+    const type = ((el.getAttribute('type') || '') + '').toLowerCase();
+    const attrs = `${el.name || ''} ${el.id || ''} ${el.autocomplete || ''}`.toLowerCase();
+    return type === 'password' || attrs.includes('pass') || attrs.includes('pwd');
+  }
+  
   function findUsernameField(preferredName) {
     const selectors = [
-      `input[name="${preferredName}"]`,
-      `input[id="${preferredName}"]`,
-      `input[name="${preferredName?.replace(/\$/g, '_')}"]`,
+      ...(preferredName ? [`input[name="${preferredName}"]`, `input[id="${preferredName}"]`] : []),
+      ...(preferredName ? [`input[name="${preferredName.replace(/\$/g, '_')}"]`] : []),
       `input[name*="txtUserName" i]`,
       `input[name*="UserName" i]`,
       `input[id*="txtUserName" i]`,
       'input[type="email"]',
+      'input[type="text"]',
+      'input[type="tel"]',
       'input[name*="user" i]',
       'input[name*="email" i]',
       'input[name*="login" i]',
       'input[id*="user" i]',
       'input[id*="email" i]',
+      'input[id*="login" i]',
       'input[autocomplete="username"]',
       'input[placeholder*="email" i]',
       'input[placeholder*="user" i]',
       'input[name="Email"]',
       'input[name="LOGIN_ID"]',
-      'form input[type="text"]:first-of-type'
+      'input[name="loginfmt"]',
+      'input[name="identifier"]',
+      'input[aria-label*="email" i]',
+      'input[aria-label*="username" i]',
+      'form input[type="text"]:first-of-type',
+      'textarea'
     ];
     
-    for (const sel of selectors) {
-      try {
-        const el = document.querySelector(sel);
-        if (el && isVisible(el)) return el;
-      } catch (e) {}
-    }
+    const matched = querySelectorFromRoots(selectors, el => isVisible(el) && isUsernameLikeField(el));
+    if (matched) return matched;
     
-    // Fallback: any visible text input
-    const inputs = document.querySelectorAll('input[type="text"], input:not([type])');
-    for (const inp of inputs) {
-      if (isVisible(inp)) return inp;
-    }
+    const fallbackInputs = queryAllFromRoots('input, textarea', el => isVisible(el) && isUsernameLikeField(el));
+    if (fallbackInputs.length) return fallbackInputs[0];
     return null;
   }
   
   function findPasswordField(preferredName) {
     const selectors = [
-      `input[name="${preferredName}"]`,
-      `input[id="${preferredName}"]`,
-      `input[name="${preferredName?.replace(/\$/g, '_')}"]`,
+      ...(preferredName ? [`input[name="${preferredName}"]`, `input[id="${preferredName}"]`] : []),
+      ...(preferredName ? [`input[name="${preferredName.replace(/\$/g, '_')}"]`] : []),
       `input[name*="txtPassword" i]`,
       `input[id*="txtPassword" i]`,
       'input[type="password"]',
@@ -358,19 +524,19 @@
       'input[name*="pwd" i]',
       'input[id*="pass" i]',
       'input[autocomplete="current-password"]',
+      'input[autocomplete="new-password"]',
       'input[name="PASSWORD"]'
     ];
     
-    for (const sel of selectors) {
-      try {
-        const el = document.querySelector(sel);
-        if (el && isVisible(el)) return el;
-      } catch (e) {}
-    }
+    const matched = querySelectorFromRoots(selectors, el => isVisible(el) && isPasswordLikeField(el));
+    if (matched) return matched;
+    
+    const fallbackInputs = queryAllFromRoots('input', el => isVisible(el) && isPasswordLikeField(el));
+    if (fallbackInputs.length) return fallbackInputs[0];
     return null;
   }
   
-  function findLoginButton() {
+  function findLoginButton(scopeForm = null) {
     const selectors = [
       'button[type="submit"]',
       'input[type="submit"]',
@@ -385,52 +551,99 @@
       'form button:not([type="button"])'
     ];
     
-    for (const sel of selectors) {
-      try {
-        const el = document.querySelector(sel);
-        if (el && isVisible(el) && !isSkipButton(el)) return el;
-      } catch (e) {}
+    if (scopeForm) {
+      for (const sel of selectors) {
+        try {
+          const el = scopeForm.querySelector(sel);
+          if (el && isVisible(el) && !el.disabled && !isSkipButton(el)) return el;
+        } catch (e) {}
+      }
     }
     
+    const selectorMatch = querySelectorFromRoots(
+      selectors,
+      el => isVisible(el) && !el.disabled && !isSkipButton(el)
+    );
+    if (selectorMatch) return selectorMatch;
+    
     // Text search
-    const btns = document.querySelectorAll('button, input[type="submit"], input[type="button"]');
+    const btns = queryAllFromRoots('button, input[type="submit"], input[type="button"]', el => isVisible(el) && !el.disabled);
     for (const btn of btns) {
-      const text = (btn.textContent || btn.value || '').toLowerCase();
-      if ((text.includes('sign in') || text.includes('log in') || text.includes('login') || text.includes('submit')) && isVisible(btn)) {
+      const text = getControlText(btn);
+      if ((text.includes('sign in') || text.includes('log in') || text.includes('login') || text.includes('submit')) && !isSkipButton(btn)) {
         return btn;
       }
     }
     
     // Any submit in form with password
-    const forms = document.querySelectorAll('form');
+    const forms = queryAllFromRoots('form');
     for (const form of forms) {
       if (form.querySelector('input[type="password"]')) {
         const btn = form.querySelector('button, input[type="submit"]');
-        if (btn && isVisible(btn)) return btn;
+        if (btn && isVisible(btn) && !btn.disabled) return btn;
       }
     }
     
     return null;
   }
   
+  function findNextButton(contextField) {
+    const preferredText = ['next', 'continue', 'proceed', 'verify', 'go'];
+    const form = contextField ? contextField.closest('form') : null;
+    
+    const candidates = [];
+    if (form) {
+      candidates.push(...Array.from(form.querySelectorAll('button, input[type="submit"], input[type="button"]')));
+    }
+    candidates.push(...queryAllFromRoots('button, input[type="submit"], input[type="button"]'));
+    
+    const seen = new Set();
+    for (const btn of candidates) {
+      if (seen.has(btn)) continue;
+      seen.add(btn);
+      if (!isVisible(btn) || btn.disabled || isSkipButton(btn)) continue;
+      const text = getControlText(btn);
+      if (preferredText.some(word => text.includes(word))) return btn;
+    }
+    
+    return null;
+  }
+  
+  function getControlText(el) {
+    return ((el?.textContent || el?.value || '') + '').trim().toLowerCase();
+  }
+  
   function isSkipButton(el) {
-    const text = (el.textContent || el.value || '').toLowerCase();
-    return text.includes('forgot') || text.includes('register') || text.includes('sign up') || text.includes('create');
+    const text = getControlText(el);
+    return (
+      text.includes('forgot') ||
+      text.includes('register') ||
+      text.includes('sign up') ||
+      text.includes('create') ||
+      text.includes('cancel') ||
+      text.includes('back') ||
+      text.includes('reset')
+    );
   }
   
   function isVisible(el) {
-    if (!el) return false;
+    if (!el || !el.isConnected) return false;
     const style = getComputedStyle(el);
-    return style.display !== 'none' && style.visibility !== 'hidden' && el.offsetParent !== null;
+    if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return false;
+    if (el.hasAttribute('hidden') || el.getAttribute('aria-hidden') === 'true') return false;
+    const rect = el.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
   }
   
   function fillInput(el, value) {
-    if (!el || !value) return;
+    if (!el || value == null || value === '') return;
     el.focus();
     el.value = '';
     
     // Native setter for React/Angular/Vue
-    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+    const tag = (el.tagName || '').toLowerCase();
+    const proto = tag === 'textarea' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+    const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
     if (setter) setter.call(el, value);
     el.value = value;
     
