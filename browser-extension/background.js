@@ -34,12 +34,35 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'GET_PENDING_LOGIN') {
     chrome.storage.local.get('pendingLogin', (data) => {
       const pending = data.pendingLogin;
-      if (pending && isUrlMatch(pending.url, sender.tab?.url)) {
-        sendResponse(pending);
-        chrome.storage.local.remove('pendingLogin');
-      } else {
-        sendResponse(null);
+      const senderTabId = sender.tab?.id;
+      
+      if (!pending) {
+        sendResponse({ status: 'empty' });
+        return;
       }
+      
+      // Expired pending login should never be used
+      if (!pending.timestamp || Date.now() - pending.timestamp > 120000) {
+        chrome.storage.local.remove('pendingLogin');
+        sendResponse({ status: 'expired' });
+        return;
+      }
+      
+      // Brief race: tab is being created and targetTabId is not attached yet
+      if (!pending.targetTabId) {
+        sendResponse({ status: 'waiting' });
+        return;
+      }
+      
+      // Never release credentials to a different tab
+      if (!senderTabId || senderTabId !== pending.targetTabId) {
+        sendResponse({ status: 'empty' });
+        return;
+      }
+      
+      // Keep pending login until content script reports success/failure.
+      // This supports multi-step redirects where content script re-runs.
+      sendResponse({ status: 'ready', ...pending });
     });
     return true;
   }
@@ -51,6 +74,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
   
   if (request.action === 'LOGIN_SUCCESS' || request.action === 'LOGIN_FAILED') {
+    clearPendingLoginForTab(sender.tab?.id);
     sendResponse({ acknowledged: true });
     return true;
   }
@@ -98,7 +122,8 @@ async function handleSecureLogin(request, sendResponse) {
       usernameField: usernameField,
       passwordField: passwordField,
       toolName: request.toolName,
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      targetTabId: null
     };
     
     await chrome.storage.local.set({ pendingLogin: loginData });
@@ -108,6 +133,10 @@ async function handleSecureLogin(request, sendResponse) {
       url: request.loginUrl,
       active: true  // VISIBLE - but overlay covers everything
     });
+    
+    // Bind credentials to only this tab (prevents other tabs from consuming pending login)
+    loginData.targetTabId = tab.id;
+    await chrome.storage.local.set({ pendingLogin: loginData });
     
     // Clear credentials from memory
     setTimeout(() => {
@@ -150,6 +179,22 @@ function setBackendUrl(url) {
 function getDynamicBackendUrl() {
   return dynamicBackendUrl || 'https://portal.dsgtransport.net';
 }
+
+function clearPendingLoginForTab(tabId) {
+  if (!tabId) return;
+  chrome.storage.local.get('pendingLogin', (data) => {
+    const pending = data.pendingLogin;
+    if (!pending) return;
+    if (!pending.targetTabId || pending.targetTabId === tabId) {
+      chrome.storage.local.remove('pendingLogin');
+    }
+  });
+}
+
+// If the target tab is closed, clear pending credentials immediately
+chrome.tabs.onRemoved.addListener((tabId) => {
+  clearPendingLoginForTab(tabId);
+});
 
 // Cleanup expired data
 setInterval(() => {

@@ -7,6 +7,8 @@
   
   let loadingOverlay = null;
   let loginAttempted = false;
+  const PENDING_RETRY_DELAY_MS = 300;
+  const MAX_PENDING_RETRIES = 25;
   
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
@@ -15,19 +17,44 @@
   }
   
   function init() {
-    chrome.runtime.sendMessage({ action: 'GET_PENDING_LOGIN' }, (pending) => {
-      if (chrome.runtime.lastError || !pending || loginAttempted) return;
-      loginAttempted = true;
-      
-      // Best-effort overlay: never block autofill if rendering fails
-      try {
-        showLoadingOverlay(pending.toolName);
-      } catch (err) {
-        console.warn('[DSG Secure Login] Overlay failed to render:', err);
+    requestPendingLogin(0);
+  }
+
+  function requestPendingLogin(attempt) {
+    if (loginAttempted) return;
+
+    chrome.runtime.sendMessage({ action: 'GET_PENDING_LOGIN' }, (response) => {
+      // Service worker may still be starting up; retry a few times
+      if (chrome.runtime.lastError) {
+        if (attempt < MAX_PENDING_RETRIES) {
+          setTimeout(() => requestPendingLogin(attempt + 1), PENDING_RETRY_DELAY_MS);
+        }
+        return;
       }
-      
-      // Fill credentials behind the overlay
-      setTimeout(() => fillAndSubmit(pending), 500);
+
+      const hasCreds = Boolean(response?.username && response?.password);
+      const isReady = response?.status === 'ready' || (hasCreds && !response?.status);
+      const shouldRetry = response?.status === 'waiting';
+
+      if (isReady && hasCreds) {
+        loginAttempted = true;
+
+        // Best-effort overlay: never block autofill if rendering fails
+        try {
+          showLoadingOverlay(response.toolName);
+        } catch (err) {
+          console.warn('[DSG Secure Login] Overlay failed to render:', err);
+        }
+        
+        // Fill credentials behind the overlay
+        setTimeout(() => fillAndSubmit(response), 500);
+        return;
+      }
+
+      // Retry only when background indicates tab-binding race
+      if (shouldRetry && attempt < MAX_PENDING_RETRIES) {
+        setTimeout(() => requestPendingLogin(attempt + 1), PENDING_RETRY_DELAY_MS);
+      }
     });
   }
   
@@ -125,7 +152,7 @@
   
   function fillAndSubmit(creds) {
     let attempts = 0;
-    const maxAttempts = 15;
+    const maxAttempts = 30;
     
     const tryFill = () => {
       attempts++;
