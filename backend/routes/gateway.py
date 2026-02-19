@@ -65,6 +65,16 @@ def _is_login_page_url(url: str, login_url: str) -> bool:
         return False
 
 
+def _looks_like_login_html(html: str) -> bool:
+    """Heuristic content check to avoid rendering login forms to users in strict mode."""
+    lowered = (html or "").lower()
+    has_password_input = 'type="password"' in lowered or "type='password'" in lowered
+    if not has_password_input:
+        return False
+    markers = ("sign in", "signin", "log in", "login", "username", "forgot password", "email")
+    return any(marker in lowered for marker in markers)
+
+
 def _resolve_credentials(tool: dict) -> dict:
     """
     Resolve backend login credentials.
@@ -333,6 +343,15 @@ async def proxy_tool_request(session_token: str, path: str = "", request: Reques
 
         if "text/html" in resp_content_type:
             html = payload.decode("utf-8", errors="ignore")
+            if _looks_like_login_html(html):
+                return HTMLResponse(
+                    get_error_html(
+                        "Strict Session Blocked Login Screen",
+                        "Login form was detected in upstream response. "
+                        "For security, login pages are blocked in strict backend mode."
+                    ),
+                    status_code=440
+                )
             html = _rewrite_html_for_proxy(html, session_token, session["base_url"])
             return Response(content=html.encode("utf-8"), media_type="text/html", status_code=resp_status)
 
