@@ -1,4 +1,4 @@
-// DSG Transport Secure Login - Content Script v1.3.7
+// DSG Transport Secure Login - Content Script v1.3.8
 // Shows OVERLAY to hide login form, fills credentials, auto-submits
 // DETECTS CAPTCHA/2FA: If found, reveals page for user to complete manually
 // User NEVER sees credentials - only masked dots (••••••••)
@@ -299,7 +299,10 @@
                 // Try form.submit() as fallback
                 const form = userField.closest('form') || passField.closest('form');
                 if (form) {
-                  scrambleFieldsBeforeSubmit(userField, passField);
+                  // Force POST and remove dummy fields
+                  form.method = 'POST';
+                  form.querySelectorAll('input[name^="fake_"]').forEach(f => f.remove());
+                  document.querySelectorAll('input[name^="fake_"]').forEach(f => f.parentElement?.remove());
                   form.submit();
                 }
                 setTimeout(hideLoadingOverlay, 1000);
@@ -369,30 +372,23 @@
     passField.blur();
   }
   
-  function scrambleFieldsBeforeSubmit(userField, passField) {
-    const rand = '_dsg_' + Date.now() + '_' + Math.random().toString(36).slice(2);
-    userField.name = 'f_x' + rand;
-    userField.id = 'i_x' + rand;
-    passField.name = 'f_y' + rand;
-    passField.id = 'i_y' + rand;
-    passField.setAttribute('autocomplete', 'new-password');
-  }
-  
   function submitWithPasswordPrevention(userField, passField, btn) {
     const form = userField.closest('form') || passField.closest('form');
     
-    // Store originals
-    const origUserName = userField.name;
-    const origPassName = passField.name;
-    const origUserId = userField.id;
-    const origPassId = passField.id;
+    if (form) {
+      // CRITICAL: Force POST method to prevent credentials in URL
+      form.method = 'POST';
+      form.setAttribute('autocomplete', 'off');
+      
+      // Remove dummy fields before submit (they add empty params)
+      const dummyFields = form.querySelectorAll('input[name^="fake_"]');
+      dummyFields.forEach(f => f.remove());
+    }
     
-    // Scramble before submit
-    scrambleFieldsBeforeSubmit(userField, passField);
+    // Remove any dummy fields we added to body
+    document.querySelectorAll('input[name^="fake_"]').forEach(f => f.parentElement?.remove());
     
-    if (form) form.setAttribute('autocomplete', 'off');
-    
-    // Click button
+    // Click button (keep original field names - don't scramble!)
     requestAnimationFrame(() => {
       btn.click();
       
@@ -410,18 +406,6 @@
       
       // Hide overlay after redirect starts
       setTimeout(hideLoadingOverlay, 1500);
-      
-      // Restore originals (in case of validation error)
-      setTimeout(() => {
-        if (document.contains(userField)) {
-          userField.name = origUserName;
-          userField.id = origUserId;
-        }
-        if (document.contains(passField)) {
-          passField.name = origPassName;
-          passField.id = origPassId;
-        }
-      }, 600);
     });
     
     chrome.runtime.sendMessage({ action: 'LOGIN_SUCCESS' });
