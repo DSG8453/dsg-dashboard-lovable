@@ -1,0 +1,57 @@
+name: Scheduled MongoDB Export Backup
+
+on:
+  schedule:
+    - cron: "15 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: scheduled-db-export-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  export-backup:
+    name: Export database backup to GCS
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install backup dependencies
+        run: python -m pip install --upgrade pip && python -m pip install -r backend/requirements.txt
+
+      - name: Authenticate to Google Cloud (OIDC)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Run MongoDB export backup
+        env:
+          MONGO_URL: ${{ secrets.BACKUP_MONGO_URL }}
+          DB_NAME: ${{ vars.BACKUP_DB_NAME }}
+          BACKUP_BUCKET: ${{ vars.BACKUP_BUCKET }}
+          BACKUP_PREFIX: ${{ vars.BACKUP_PREFIX }}
+          BACKUP_RETENTION_DAYS: ${{ vars.BACKUP_RETENTION_DAYS }}
+        run: |
+          set -euo pipefail
+          if [ -z "${MONGO_URL}" ] || [ -z "${BACKUP_BUCKET}" ]; then
+            echo "Missing BACKUP_MONGO_URL secret or BACKUP_BUCKET variable." >&2
+            exit 1
+          fi
+
+          export DB_NAME="${DB_NAME:-dsg_transport}"
+          export BACKUP_PREFIX="${BACKUP_PREFIX:-mongo-backups/${DB_NAME}}"
+          export BACKUP_RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-30}"
+
+          python backend/scripts/backup_mongodb_to_gcs.py
