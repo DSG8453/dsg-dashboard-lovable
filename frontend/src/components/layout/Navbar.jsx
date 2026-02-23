@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -31,6 +32,7 @@ import {
 } from "lucide-react";
 
 export const Navbar = ({ currentUser }) => {
+  const { t, i18n } = useTranslation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [pendingDevicesCount, setPendingDevicesCount] = useState(0);
   const { logout } = useAuth();
@@ -77,28 +79,28 @@ export const Navbar = ({ currentUser }) => {
     // User only sees Dashboard
     if (isUser) {
       return [
-        { name: "Dashboard", href: "/", icon: LayoutDashboard },
+        { id: "dashboard", name: t("nav.dashboard"), href: "/", icon: LayoutDashboard },
       ];
     }
 
     // Admin navigation (limited)
     if (!isSuperAdmin) {
       return [
-        { name: "Dashboard", href: "/", icon: LayoutDashboard },
-        { name: "Profile", href: "/profile", icon: User },
-        { name: "Users", href: "/users", icon: Users },
+        { id: "dashboard", name: t("nav.dashboard"), href: "/", icon: LayoutDashboard },
+        { id: "profile", name: t("nav.profile"), href: "/profile", icon: User },
+        { id: "users", name: t("nav.users"), href: "/users", icon: Users },
       ];
     }
 
     // Super Admin gets full navigation
     return [
-      { name: "Dashboard", href: "/", icon: LayoutDashboard },
-      { name: "Profile", href: "/profile", icon: User },
-      { name: "Users", href: "/users", icon: Users },
-      { name: "Credentials", href: "/credentials", icon: Key },
-      { name: "IP Management", href: "/ip-management", icon: Globe },
-      { name: "Devices", href: "/devices", icon: Smartphone },
-      { name: "Activity Logs", href: "/activity-logs", icon: FileText },
+      { id: "dashboard", name: t("nav.dashboard"), href: "/", icon: LayoutDashboard },
+      { id: "profile", name: t("nav.profile"), href: "/profile", icon: User },
+      { id: "users", name: t("nav.users"), href: "/users", icon: Users },
+      { id: "credentials", name: t("nav.credentials"), href: "/credentials", icon: Key },
+      { id: "ipManagement", name: t("nav.ipManagement"), href: "/ip-management", icon: Globe },
+      { id: "devices", name: t("nav.devices"), href: "/devices", icon: Smartphone },
+      { id: "activityLogs", name: t("nav.activityLogs"), href: "/activity-logs", icon: FileText },
     ];
   };
 
@@ -120,17 +122,17 @@ export const Navbar = ({ currentUser }) => {
           {/* Desktop Navigation */}
           <div className="hidden lg:flex items-center gap-1">
             {navigation.map((item) => (
-              <NavLink key={item.name} to={item.href}>
+              <NavLink key={item.id} to={item.href}>
                 {({ isActive }) => (
                   <Button
                     variant={isActive ? "navActive" : "nav"}
                     size="sm"
-                    className={`gap-2 ${item.name === "Devices" ? "relative" : ""}`}
+                    className={`gap-2 ${item.id === "devices" ? "relative" : ""}`}
                     onClick={(e) => e.stopPropagation()}
                   >
                     <item.icon className="h-4 w-4" />
                     <span className="hidden xl:inline">{item.name}</span>
-                    {item.name === "Devices" && pendingDevicesCount > 0 && (
+                    {item.id === "devices" && pendingDevicesCount > 0 && (
                       <Badge 
                         variant="warning" 
                         className="absolute -top-1 -right-1 h-5 w-5 p-0 flex items-center justify-center text-xs bg-yellow-500 text-black pointer-events-none"
@@ -154,7 +156,7 @@ export const Navbar = ({ currentUser }) => {
                 >
                   <TicketIcon className="h-4 w-4" />
                   <span className="hidden xl:inline">
-                    {isSuperAdmin ? "All Issues" : "My Issues"}
+                    {isSuperAdmin ? t("nav.allIssues") : t("nav.myIssues")}
                   </span>
                   {openIssuesCount > 0 && (
                     <Badge 
@@ -179,7 +181,7 @@ export const Navbar = ({ currentUser }) => {
                     onClick={(e) => e.stopPropagation()}
                   >
                     <HeadphonesIcon className="h-4 w-4" />
-                    <span className="hidden xl:inline">Support</span>
+                    <span className="hidden xl:inline">{t("nav.support")}</span>
                   </Button>
                 )}
               </NavLink>
@@ -198,9 +200,9 @@ export const Navbar = ({ currentUser }) => {
                   </Avatar>
                   <div className="hidden sm:block text-left">
                     <p className="text-sm font-semibold text-foreground">
-                      {currentUser?.name || "User"}
+                      {currentUser?.name || t("user.defaultName")}
                     </p>
-                    <p className="text-xs text-admin">{currentUser?.role || "User"}</p>
+                    <p className="text-xs text-admin">{currentUser?.role || t("user.defaultRole")}</p>
                   </div>
                   <ChevronDown className="h-4 w-4 text-muted-foreground" />
                 </Button>
@@ -220,13 +222,13 @@ export const Navbar = ({ currentUser }) => {
                 {(isAdmin || isSuperAdmin) && (
                   <DropdownMenuItem onClick={() => navigate("/profile")}>
                     <User className="mr-2 h-4 w-4" />
-                    Profile
+                    {t("nav.profile")}
                   </DropdownMenuItem>
                 )}
                 
                 <DropdownMenuItem onClick={() => navigate("/issues")}>
                   <TicketIcon className="mr-2 h-4 w-4" />
-                  {isSuperAdmin ? "All Issues" : "My Issues"}
+                  {isSuperAdmin ? t("nav.allIssues") : t("nav.myIssues")}
                   {openIssuesCount > 0 && (
                     <Badge variant="destructive" className="ml-auto">
                       {openIssuesCount}
@@ -237,9 +239,20 @@ export const Navbar = ({ currentUser }) => {
                 {isSuperAdmin && (
                   <DropdownMenuItem onClick={() => navigate("/support")}>
                     <HeadphonesIcon className="mr-2 h-4 w-4" />
-                    Support Management
+                    {t("nav.supportManagement")}
                   </DropdownMenuItem>
                 )}
+                
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel>{t("nav.language")}</DropdownMenuLabel>
+                <DropdownMenuItem onClick={() => i18n.changeLanguage("en")}>
+                  <span>{t("nav.english")}</span>
+                  {i18n.resolvedLanguage?.startsWith("en") && <Badge className="ml-auto">EN</Badge>}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => i18n.changeLanguage("es")}>
+                  <span>{t("nav.spanish")}</span>
+                  {i18n.resolvedLanguage?.startsWith("es") && <Badge className="ml-auto">ES</Badge>}
+                </DropdownMenuItem>
                 
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
@@ -247,7 +260,7 @@ export const Navbar = ({ currentUser }) => {
                   className="text-destructive focus:text-destructive"
                 >
                   <LogOut className="mr-2 h-4 w-4" />
-                  Logout
+                  {t("nav.logout")}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -276,7 +289,7 @@ export const Navbar = ({ currentUser }) => {
                   <nav className="flex flex-col gap-1">
                     {navigation.map((item) => (
                       <NavLink
-                        key={item.name}
+                        key={item.id}
                         to={item.href}
                         onClick={() => setMobileOpen(false)}
                       >
@@ -287,7 +300,7 @@ export const Navbar = ({ currentUser }) => {
                           >
                             <item.icon className="h-5 w-5" />
                             {item.name}
-                            {item.name === "Devices" && pendingDevicesCount > 0 && (
+                            {item.id === "devices" && pendingDevicesCount > 0 && (
                               <Badge variant="warning" className="ml-auto bg-yellow-500 text-black">
                                 {pendingDevicesCount}
                               </Badge>
@@ -305,7 +318,7 @@ export const Navbar = ({ currentUser }) => {
                           className="w-full justify-start gap-3"
                         >
                           <TicketIcon className="h-5 w-5" />
-                          {isSuperAdmin ? "All Issues" : "My Issues"}
+                          {isSuperAdmin ? t("nav.allIssues") : t("nav.myIssues")}
                           {openIssuesCount > 0 && (
                             <Badge variant="destructive" className="ml-auto">
                               {openIssuesCount}
@@ -324,12 +337,32 @@ export const Navbar = ({ currentUser }) => {
                             className="w-full justify-start gap-3"
                           >
                             <HeadphonesIcon className="h-5 w-5" />
-                            Support Management
+                            {t("nav.supportManagement")}
                           </Button>
                         )}
                       </NavLink>
                     )}
                   </nav>
+
+                  <div className="pt-4 border-t border-border space-y-2">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">{t("nav.language")}</p>
+                    <div className="flex gap-2">
+                      <Button
+                        variant={i18n.resolvedLanguage?.startsWith("en") ? "default" : "outline"}
+                        className="flex-1"
+                        onClick={() => i18n.changeLanguage("en")}
+                      >
+                        {t("nav.english")}
+                      </Button>
+                      <Button
+                        variant={i18n.resolvedLanguage?.startsWith("es") ? "default" : "outline"}
+                        className="flex-1"
+                        onClick={() => i18n.changeLanguage("es")}
+                      >
+                        {t("nav.spanish")}
+                      </Button>
+                    </div>
+                  </div>
 
                   <div className="pt-4 border-t border-border">
                     <Button
@@ -338,7 +371,7 @@ export const Navbar = ({ currentUser }) => {
                       onClick={handleLogout}
                     >
                       <LogOut className="h-5 w-5" />
-                      Logout
+                      {t("nav.logout")}
                     </Button>
                   </div>
                 </div>

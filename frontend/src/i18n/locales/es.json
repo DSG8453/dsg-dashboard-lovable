@@ -1,0 +1,29 @@
+{
+  "app": {
+    "loading": "Cargando..."
+  },
+  "nav": {
+    "dashboard": "Panel",
+    "profile": "Perfil",
+    "users": "Usuarios",
+    "credentials": "Credenciales",
+    "ipManagement": "Gestión de IP",
+    "devices": "Dispositivos",
+    "activityLogs": "Registros de actividad",
+    "support": "Soporte",
+    "supportManagement": "Gestión de soporte",
+    "allIssues": "Todos los tickets",
+    "myIssues": "Mis tickets",
+    "logout": "Cerrar sesión",
+    "language": "Idioma",
+    "english": "Inglés",
+    "spanish": "Español"
+  },
+  "user": {
+    "defaultName": "Usuario",
+    "defaultRole": "Usuario"
+  },
+  "brand": {
+    "name": "DSG Transport LLC"
+  }
+}
