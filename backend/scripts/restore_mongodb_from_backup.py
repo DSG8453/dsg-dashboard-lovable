@@ -60,6 +60,14 @@ def read_ndjson(path: Path) -> Iterable[dict]:
                 continue
             yield json_util.loads(line)
 
+def safe_extract(tar: tarfile.TarFile, target_dir: Path) -> None:
+    target_dir_resolved = target_dir.resolve()
+    for member in tar.getmembers():
+        member_path = (target_dir / member.name).resolve()
+        if not str(member_path).startswith(str(target_dir_resolved)):
+            raise RuntimeError(f"Unsafe archive path detected: {member.name}")
+    tar.extractall(path=target_dir)
+
 
 def restore() -> int:
     mongo_url = get_required_env("MONGO_URL")
@@ -82,7 +90,7 @@ def restore() -> int:
         extract_dir = temp_path / "extract"
         extract_dir.mkdir(parents=True, exist_ok=True)
         with tarfile.open(archive_file, mode="r:gz") as tar:
-            tar.extractall(path=extract_dir)
+            safe_extract(tar, extract_dir)
 
         backup_root_candidates = [path for path in extract_dir.iterdir() if path.is_dir()]
         if not backup_root_candidates:

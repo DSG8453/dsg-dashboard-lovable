@@ -6,8 +6,8 @@ backup_bucket_location = "US"
 # Use your deployed backend image or dedicated backup image.
 backup_job_image = "us-central1-docker.pkg.dev/your-gcp-project-id/backend-images/dsg-backend:latest"
 
-# Keep sensitive values in a secure tfvars file or secret manager.
-mongo_url = "mongodb+srv://username:password@cluster.mongodb.net/dsg_transport"
+# Store Mongo URI in Secret Manager; reference only the secret ID here.
+mongo_url_secret_id = "mongo-uri"
 
 db_name               = "dsg_transport"
 backup_prefix         = "mongo-backups/dsg_transport"

@@ -65,7 +65,7 @@ Key values to set in `terraform.tfvars`:
 - `project_id`
 - `backup_bucket_name`
 - `backup_job_image`
-- `mongo_url`
+- `mongo_url_secret_id`
 - `backup_cron`
 
 ## 4) Recommended cadence and retention
@@ -79,5 +79,7 @@ Key values to set in `terraform.tfvars`:
 If you prefer GitHub-hosted cron over Cloud Scheduler, configure these and enable
 `.github/workflows/scheduled-db-export.yml`:
 
-- Repository Secret: `BACKUP_MONGO_URL`
-- Repository Variables: `BACKUP_BUCKET`, optionally `BACKUP_DB_NAME`, `BACKUP_PREFIX`, `BACKUP_RETENTION_DAYS`
+- Repository Variables:
+  - `BACKUP_MONGO_SECRET_ID` (Secret Manager secret containing MongoDB URI)
+  - `BACKUP_BUCKET`
+  - Optional: `BACKUP_MONGO_SECRET_VERSION`, `BACKUP_DB_NAME`, `BACKUP_PREFIX`, `BACKUP_RETENTION_DAYS`

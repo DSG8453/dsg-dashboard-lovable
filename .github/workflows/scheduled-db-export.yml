@@ -38,17 +38,21 @@ jobs:
 
       - name: Run MongoDB export backup
         env:
-          MONGO_URL: ${{ secrets.BACKUP_MONGO_URL }}
+          BACKUP_MONGO_SECRET_ID: ${{ vars.BACKUP_MONGO_SECRET_ID }}
+          BACKUP_MONGO_SECRET_VERSION: ${{ vars.BACKUP_MONGO_SECRET_VERSION }}
           DB_NAME: ${{ vars.BACKUP_DB_NAME }}
           BACKUP_BUCKET: ${{ vars.BACKUP_BUCKET }}
           BACKUP_PREFIX: ${{ vars.BACKUP_PREFIX }}
           BACKUP_RETENTION_DAYS: ${{ vars.BACKUP_RETENTION_DAYS }}
         run: |
           set -euo pipefail
-          if [ -z "${MONGO_URL}" ] || [ -z "${BACKUP_BUCKET}" ]; then
-            echo "Missing BACKUP_MONGO_URL secret or BACKUP_BUCKET variable." >&2
+          if [ -z "${BACKUP_MONGO_SECRET_ID}" ] || [ -z "${BACKUP_BUCKET}" ]; then
+            echo "Missing BACKUP_MONGO_SECRET_ID or BACKUP_BUCKET repository variable." >&2
             exit 1
           fi
+
+          export BACKUP_MONGO_SECRET_VERSION="${BACKUP_MONGO_SECRET_VERSION:-latest}"
+          export MONGO_URL="$(gcloud secrets versions access "${BACKUP_MONGO_SECRET_VERSION}" --secret "${BACKUP_MONGO_SECRET_ID}")"
 
           export DB_NAME="${DB_NAME:-dsg_transport}"
           export BACKUP_PREFIX="${BACKUP_PREFIX:-mongo-backups/${DB_NAME}}"

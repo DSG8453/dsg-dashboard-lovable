@@ -37,10 +37,15 @@ variable "backup_job_image" {
   type        = string
 }
 
-variable "mongo_url" {
-  description = "MongoDB URI used for export"
+variable "mongo_url_secret_id" {
+  description = "Secret Manager secret ID that stores the MongoDB URI"
   type        = string
-  sensitive   = true
+}
+
+variable "mongo_url_secret_version" {
+  description = "Secret Manager version for MongoDB URI secret"
+  type        = string
+  default     = "latest"
 }
 
 variable "db_name" {

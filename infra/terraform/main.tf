@@ -38,6 +38,12 @@ resource "google_project_iam_member" "backup_runner_storage_access" {
   member  = "serviceAccount:${google_service_account.backup_runner.email}"
 }
 
+resource "google_project_iam_member" "backup_runner_secret_access" {
+  project = var.project_id
+  role    = "roles/secretmanager.secretAccessor"
+  member  = "serviceAccount:${google_service_account.backup_runner.email}"
+}
+
 resource "google_project_iam_member" "scheduler_run_developer" {
   project = var.project_id
   role    = "roles/run.developer"
@@ -75,7 +81,12 @@ resource "google_cloud_run_v2_job" "mongodb_backup" {
 
         env {
           name  = "MONGO_URL"
-          value = var.mongo_url
+          value_source {
+            secret_key_ref {
+              secret  = var.mongo_url_secret_id
+              version = var.mongo_url_secret_version
+            }
+          }
         }
         env {
           name  = "DB_NAME"
