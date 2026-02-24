@@ -32,7 +32,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Re-run failed workflow
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const run = context.payload.workflow_run;
@@ -55,7 +55,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Open or update issue
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const run = context.payload.workflow_run;
@@ -112,7 +112,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Close matching incident issue if open
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const run = context.payload.workflow_run;
