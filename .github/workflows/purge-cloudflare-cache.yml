@@ -7,16 +7,6 @@ on:
     types:
       - completed
   workflow_dispatch:
-    inputs:
-      purge_everything:
-        description: "Purge the entire Cloudflare zone cache"
-        required: false
-        type: boolean
-        default: false
-      urls:
-        description: "Comma or newline separated URLs to purge"
-        required: false
-        type: string
 
 permissions:
   contents: read
@@ -28,25 +18,23 @@ concurrency:
 jobs:
   purge:
     name: Purge Cloudflare cache
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    if: >-
+      ${{
+        github.event_name == 'workflow_dispatch' ||
+        (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+      }}
     runs-on: ubuntu-latest
     environment: production
     steps:
       - name: Resolve purge payload
         id: payload
         env:
-          INPUT_PURGE_EVERYTHING: ${{ inputs.purge_everything }}
-          INPUT_URLS: ${{ inputs.urls }}
-          DEFAULT_PURGE_EVERYTHING: ${{ vars.CLOUDFLARE_PURGE_EVERYTHING }}
-          DEFAULT_URLS: ${{ vars.CLOUDFLARE_PURGE_URLS }}
+          CLOUDFLARE_PURGE_EVERYTHING: ${{ vars.CLOUDFLARE_PURGE_EVERYTHING }}
+          CLOUDFLARE_PURGE_URLS: ${{ vars.CLOUDFLARE_PURGE_URLS }}
         run: |
           set -euo pipefail
-          purge_everything_flag="${INPUT_PURGE_EVERYTHING:-}"
-          if [ -z "${purge_everything_flag}" ]; then
-            purge_everything_flag="${DEFAULT_PURGE_EVERYTHING:-false}"
-          fi
-
-          urls_raw="${INPUT_URLS:-${DEFAULT_URLS:-}}"
+          purge_everything_flag="${CLOUDFLARE_PURGE_EVERYTHING:-false}"
+          urls_raw="${CLOUDFLARE_PURGE_URLS:-}"
 
           if [ "${purge_everything_flag}" = "true" ]; then
             echo 'payload={"purge_everything":true}' >> "${GITHUB_OUTPUT}"
