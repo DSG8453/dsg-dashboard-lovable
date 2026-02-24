@@ -1,6 +1,7 @@
 import "@/App.css";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
+import { useTranslation } from "react-i18next";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { SupportProvider } from "@/context/SupportContext";
 
@@ -25,6 +26,7 @@ import { IssuesPage } from "@/pages/IssuesPage";
 
 // Protected Route Component with Device Check
 const ProtectedRoute = ({ children, requireDeviceApproval = true }) => {
+  const { t } = useTranslation();
   const { isAuthenticated, isLoading, isDeviceApproved, deviceStatus, user } = useAuth();
 
   if (isLoading) {
@@ -32,7 +34,7 @@ const ProtectedRoute = ({ children, requireDeviceApproval = true }) => {
       <div className="min-h-screen bg-gradient-dsg flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Loading...</p>
+          <p className="text-muted-foreground">{t("app.loading")}</p>
         </div>
       </div>
     );
@@ -186,6 +188,8 @@ function AppRoutes() {
 }
 
 function App() {
+  const { t } = useTranslation();
+
   return (
     <BrowserRouter>
       <AuthProvider>
@@ -203,7 +207,7 @@ function App() {
               src="https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/691ee53ded166d6334e8b9c6/0583cf617_315logodsg_.png" 
               alt="DSG Transport" 
             />
-            <span>DSG Transport LLC</span>
+            <span>{t("brand.name")}</span>
           </a>
         </SupportProvider>
       </AuthProvider>

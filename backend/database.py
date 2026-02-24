@@ -42,17 +42,35 @@ async def close_db():
 async def get_db():
     return db
 
+def env_bool(name: str, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
 async def seed_initial_data():
-    """Seed initial admin user and tools if database is empty"""
+    """Seed initial data only when explicitly enabled via environment variables."""
     from utils.security import hash_password
-    
+
+    if not env_bool("ENABLE_BOOTSTRAP_SEED", False):
+        print("Bootstrap seed disabled (set ENABLE_BOOTSTRAP_SEED=true to enable).")
+        return
+
+    admin_email = os.getenv("INITIAL_ADMIN_EMAIL", "admin@dsgtransport.com").strip().lower()
+    initial_admin_password = os.getenv("INITIAL_ADMIN_PASSWORD", "").strip()
+
+    if not initial_admin_password:
+        raise RuntimeError(
+            "INITIAL_ADMIN_PASSWORD is required when ENABLE_BOOTSTRAP_SEED=true."
+        )
+
     # Check if admin exists
-    admin = await db.users.find_one({"email": "admin@dsgtransport.com"})
+    admin = await db.users.find_one({"email": admin_email})
     if not admin:
         # Create admin user
         admin_user = {
-            "email": "admin@dsgtransport.com",
-            "password": hash_password("admin123"),
+            "email": admin_email,
+            "password": hash_password(initial_admin_password),
             "name": "Admin User",
             "role": "Administrator",
             "status": "Active",
@@ -62,12 +80,18 @@ async def seed_initial_data():
         }
         await db.users.insert_one(admin_user)
         print("Admin user created")
-        
-        # Create sample users
+
+    if env_bool("ENABLE_SAMPLE_USERS_SEED", False):
+        sample_user_password = os.getenv("SAMPLE_USER_PASSWORD", "").strip()
+        if not sample_user_password:
+            raise RuntimeError(
+                "SAMPLE_USER_PASSWORD is required when ENABLE_SAMPLE_USERS_SEED=true."
+            )
+
         sample_users = [
             {
                 "email": "john.smith@dsgtransport.com",
-                "password": hash_password("john123"),
+                "password": hash_password(sample_user_password),
                 "name": "John Smith",
                 "role": "User",
                 "status": "Active",
@@ -77,7 +101,7 @@ async def seed_initial_data():
             },
             {
                 "email": "sarah.johnson@dsgtransport.com",
-                "password": hash_password("sarah123"),
+                "password": hash_password(sample_user_password),
                 "name": "Sarah Johnson",
                 "role": "User",
                 "status": "Active",
@@ -86,8 +110,12 @@ async def seed_initial_data():
                 "created_at": "2025-12-08T00:00:00Z"
             }
         ]
-        await db.users.insert_many(sample_users)
-        print("Sample users created")
+
+        for user_data in sample_users:
+            exists = await db.users.find_one({"email": user_data["email"]})
+            if not exists:
+                await db.users.insert_one(user_data)
+        print("Sample users seeded")
     
     # Check if tools exist
     tools_count = await db.tools.count_documents({})

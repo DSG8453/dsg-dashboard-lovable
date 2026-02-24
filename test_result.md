@@ -10,9 +10,8 @@ A full-stack management portal for DSG Transport LLC with:
 - **Browser Extension for Secure Auto-Login with Auto-Submit** (ENHANCED)
 
 ## Test Credentials
-- **Super Admin:** info@dsgtransport.net / admin123 (2SV currently disabled for testing)
-- **Admin:** admin@dsgtransport.com / admin123 (no 2SV)
-- **User:** testuser@dsgtransport.com / user123
+- Credentials are injected via secure environment variables during testing.
+- No plaintext usernames/passwords should be stored in repository files.
 
 ## Backend API Base URL
 Use REACT_APP_BACKEND_URL from /app/frontend/.env with /api prefix
@@ -116,6 +115,6 @@ Use REACT_APP_BACKEND_URL from /app/frontend/.env with /api prefix
   4. Toast message updated to "Auto-login in progress"
   
 - Users Created:
-  1. info@dsgtransport.net (Super Administrator) - Super Admin
-  2. info@dsgtransport.com (User) - User role as requested
-  3. admin@dsgtransport.com (Administrator) - Admin role as requested
+  1. Super Administrator account created (email redacted)
+  2. User account created (email redacted)
+  3. Administrator account created (email redacted)

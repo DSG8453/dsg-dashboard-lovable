@@ -1,0 +1,137 @@
+name: Deploy Backend to GCP Cloud Run
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - "backend/**"
+      - ".github/workflows/deploy-backend-gcp.yml"
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Optional image tag override"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: gcp-backend-deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test-backend:
+    name: Backend quality gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install backend dependencies
+        run: python -m pip install --upgrade pip && python -m pip install -r backend/requirements.txt
+
+      - name: Run backend tests (if present)
+        run: |
+          set -euo pipefail
+          if [ -d "backend/tests" ]; then
+            python -m pip install pytest
+            python -m pytest backend/tests -q
+          else
+            echo "No backend tests directory found, skipping."
+          fi
+
+  deploy:
+    name: Deploy to Cloud Run
+    needs: test-backend
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Resolve deployment configuration
+        env:
+          INPUT_IMAGE_TAG: ${{ inputs.image_tag }}
+          VAR_GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          VAR_GCP_REGION: ${{ vars.GCP_REGION }}
+          VAR_GCP_ARTIFACT_REPO: ${{ vars.GCP_ARTIFACT_REPO }}
+          VAR_GCP_BACKEND_SERVICE: ${{ vars.GCP_BACKEND_SERVICE }}
+        run: |
+          set -euo pipefail
+          if [ -z "${VAR_GCP_PROJECT_ID}" ]; then
+            echo "Missing repository variable: GCP_PROJECT_ID" >&2
+            exit 1
+          fi
+
+          GCP_REGION="${VAR_GCP_REGION:-us-central1}"
+          GCP_ARTIFACT_REPO="${VAR_GCP_ARTIFACT_REPO:-backend-images}"
+          GCP_BACKEND_SERVICE="${VAR_GCP_BACKEND_SERVICE:-dsg-backend}"
+          IMAGE_TAG="${INPUT_IMAGE_TAG:-${GITHUB_SHA}}"
+
+          echo "GCP_PROJECT_ID=${VAR_GCP_PROJECT_ID}" >> "${GITHUB_ENV}"
+          echo "GCP_REGION=${GCP_REGION}" >> "${GITHUB_ENV}"
+          echo "GCP_ARTIFACT_REPO=${GCP_ARTIFACT_REPO}" >> "${GITHUB_ENV}"
+          echo "GCP_BACKEND_SERVICE=${GCP_BACKEND_SERVICE}" >> "${GITHUB_ENV}"
+          echo "IMAGE_TAG=${IMAGE_TAG}" >> "${GITHUB_ENV}"
+
+      - name: Authenticate to Google Cloud (OIDC)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker auth for Artifact Registry
+        run: gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev" --quiet
+
+      - name: Build and push backend image
+        id: build-image
+        run: |
+          set -euo pipefail
+          IMAGE_URI="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GCP_ARTIFACT_REPO}/${GCP_BACKEND_SERVICE}:${IMAGE_TAG}"
+          docker build --file backend/Dockerfile --tag "${IMAGE_URI}" backend
+          docker push "${IMAGE_URI}"
+          echo "image_uri=${IMAGE_URI}" >> "${GITHUB_OUTPUT}"
+
+      - name: Deploy Cloud Run service
+        id: deploy-service
+        env:
+          IMAGE_URI: ${{ steps.build-image.outputs.image_uri }}
+        run: |
+          set -euo pipefail
+          gcloud run deploy "${GCP_BACKEND_SERVICE}" \
+            --image "${IMAGE_URI}" \
+            --platform managed \
+            --region "${GCP_REGION}" \
+            --project "${GCP_PROJECT_ID}" \
+            --allow-unauthenticated
+          SERVICE_URL="$(gcloud run services describe "${GCP_BACKEND_SERVICE}" --region "${GCP_REGION}" --project "${GCP_PROJECT_ID}" --format='value(status.url)')"
+          echo "service_url=${SERVICE_URL}" >> "${GITHUB_OUTPUT}"
+
+      - name: Smoke test deployed backend
+        env:
+          SERVICE_URL: ${{ steps.deploy-service.outputs.service_url }}
+        run: |
+          set -euo pipefail
+          HEALTH_URL="${SERVICE_URL}/api/health"
+          echo "Running smoke check against ${HEALTH_URL}"
+          for attempt in 1 2 3 4 5; do
+            if curl -fsS "${HEALTH_URL}" > /dev/null; then
+              echo "Smoke test passed"
+              exit 0
+            fi
+            sleep $((attempt * 2))
+          done
+          echo "Smoke test failed" >&2
+          exit 1

@@ -1,0 +1,61 @@
+name: Scheduled MongoDB Export Backup
+
+on:
+  schedule:
+    - cron: "15 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: scheduled-db-export-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  export-backup:
+    name: Export database backup to GCS
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install backup dependencies
+        run: python -m pip install --upgrade pip && python -m pip install -r backend/requirements.txt
+
+      - name: Authenticate to Google Cloud (OIDC)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Run MongoDB export backup
+        env:
+          BACKUP_MONGO_SECRET_ID: ${{ vars.BACKUP_MONGO_SECRET_ID }}
+          BACKUP_MONGO_SECRET_VERSION: ${{ vars.BACKUP_MONGO_SECRET_VERSION }}
+          DB_NAME: ${{ vars.BACKUP_DB_NAME }}
+          BACKUP_BUCKET: ${{ vars.BACKUP_BUCKET }}
+          BACKUP_PREFIX: ${{ vars.BACKUP_PREFIX }}
+          BACKUP_RETENTION_DAYS: ${{ vars.BACKUP_RETENTION_DAYS }}
+        run: |
+          set -euo pipefail
+          if [ -z "${BACKUP_MONGO_SECRET_ID}" ] || [ -z "${BACKUP_BUCKET}" ]; then
+            echo "Missing BACKUP_MONGO_SECRET_ID or BACKUP_BUCKET repository variable." >&2
+            exit 1
+          fi
+
+          export BACKUP_MONGO_SECRET_VERSION="${BACKUP_MONGO_SECRET_VERSION:-latest}"
+          export MONGO_URL="$(gcloud secrets versions access "${BACKUP_MONGO_SECRET_VERSION}" --secret "${BACKUP_MONGO_SECRET_ID}")"
+
+          export DB_NAME="${DB_NAME:-dsg_transport}"
+          export BACKUP_PREFIX="${BACKUP_PREFIX:-mongo-backups/${DB_NAME}}"
+          export BACKUP_RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-30}"
+
+          python backend/scripts/backup_mongodb_to_gcs.py

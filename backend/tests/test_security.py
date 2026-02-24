@@ -8,16 +8,26 @@ Tests for:
 import pytest
 import httpx
 import os
-import asyncio
-from datetime import datetime
 
 # Get API URL from environment
 API_URL = os.environ.get("API_URL", "https://portal.dsgtransport.net")
 
-# Test credentials
-SUPER_ADMIN = {"email": "info@dsgtransport.net", "password": "admin123"}
-ADMIN = {"email": "admin@dsgtransport.com", "password": "admin123"}
-USER = {"email": "testuser@dsgtransport.com", "password": "user123"}
+def credential_from_env(email_var: str, password_var: str) -> dict:
+    email = os.environ.get(email_var, "").strip()
+    password = os.environ.get(password_var, "").strip()
+    return {"email": email, "password": password}
+
+# Test credentials are required via environment to avoid hardcoded secrets.
+SUPER_ADMIN = credential_from_env("TEST_SUPER_ADMIN_EMAIL", "TEST_SUPER_ADMIN_PASSWORD")
+ADMIN = credential_from_env("TEST_ADMIN_EMAIL", "TEST_ADMIN_PASSWORD")
+USER = credential_from_env("TEST_USER_EMAIL", "TEST_USER_PASSWORD")
+
+def require_credentials(credentials: dict, role_name: str):
+    if not credentials.get("email") or not credentials.get("password"):
+        pytest.skip(
+            f"Missing test credentials for {role_name}. "
+            "Set TEST_*_EMAIL and TEST_*_PASSWORD environment variables."
+        )
 
 
 async def get_token(client: httpx.AsyncClient, credentials: dict) -> str:
@@ -33,6 +43,7 @@ async def get_token(client: httpx.AsyncClient, credentials: dict) -> str:
 @pytest.mark.asyncio
 async def test_admin_cannot_see_credentials():
     """Test that Admin users cannot see credentials in tool responses"""
+    require_credentials(ADMIN, "ADMIN")
     async with httpx.AsyncClient() as client:
         token = await get_token(client, ADMIN)
         assert token, "Admin login failed"
@@ -56,6 +67,7 @@ async def test_admin_cannot_see_credentials():
 @pytest.mark.asyncio
 async def test_user_cannot_see_credentials():
     """Test that regular Users cannot see credentials in tool responses"""
+    require_credentials(USER, "USER")
     async with httpx.AsyncClient() as client:
         token = await get_token(client, USER)
         assert token, "User login failed"
@@ -77,6 +89,7 @@ async def test_user_cannot_see_credentials():
 @pytest.mark.asyncio
 async def test_super_admin_can_see_credentials():
     """Test that Super Admin CAN see credentials in tool responses"""
+    require_credentials(SUPER_ADMIN, "SUPER_ADMIN")
     async with httpx.AsyncClient() as client:
         token = await get_token(client, SUPER_ADMIN)
         assert token, "Super Admin login failed"
@@ -104,6 +117,7 @@ async def test_super_admin_can_see_credentials():
 @pytest.mark.asyncio
 async def test_decrypt_endpoint_blocks_invalid_origin():
     """Test that decrypt endpoint blocks requests from non-extension origins"""
+    require_credentials(SUPER_ADMIN, "SUPER_ADMIN")
     async with httpx.AsyncClient() as client:
         # First get a valid encrypted payload
         token = await get_token(client, SUPER_ADMIN)
@@ -148,6 +162,7 @@ async def test_decrypt_endpoint_blocks_invalid_origin():
 @pytest.mark.asyncio
 async def test_decrypt_endpoint_allows_extension_origin():
     """Test that decrypt endpoint allows requests from browser extension origins"""
+    require_credentials(SUPER_ADMIN, "SUPER_ADMIN")
     async with httpx.AsyncClient() as client:
         # First get a valid encrypted payload
         token = await get_token(client, SUPER_ADMIN)
@@ -193,6 +208,7 @@ async def test_decrypt_endpoint_allows_extension_origin():
 @pytest.mark.asyncio
 async def test_admin_can_access_assigned_tools():
     """Test that Admin can access tools assigned to them"""
+    require_credentials(ADMIN, "ADMIN")
     async with httpx.AsyncClient() as client:
         token = await get_token(client, ADMIN)
         assert token, "Admin login failed"

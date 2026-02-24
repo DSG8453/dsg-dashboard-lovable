@@ -1,0 +1,16 @@
+project_id           = "your-gcp-project-id"
+region               = "us-central1"
+backup_bucket_name   = "your-project-db-backups"
+backup_bucket_location = "US"
+
+# Use your deployed backend image or dedicated backup image.
+backup_job_image = "us-central1-docker.pkg.dev/your-gcp-project-id/backend-images/dsg-backend:latest"
+
+# Store Mongo URI in Secret Manager; reference only the secret ID here.
+mongo_url_secret_id = "mongo-uri"
+
+db_name               = "dsg_transport"
+backup_prefix         = "mongo-backups/dsg_transport"
+backup_retention_days = 30
+backup_cron           = "15 2 * * *"
+backup_time_zone      = "Etc/UTC"

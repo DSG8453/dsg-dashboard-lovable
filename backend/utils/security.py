@@ -15,19 +15,44 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
-# Get secrets from Secret Manager
-try:
-    from services.secret_manager_service import SecretManagerService
-    secret_manager = SecretManagerService()
-    SECRET_KEY = secret_manager.get_secret("jwt-secret") or os.getenv("JWT_SECRET_KEY", "fallback-dev-key")
-    ENCRYPTION_KEY_VALUE = secret_manager.get_secret("encryption-key") or os.getenv("ENCRYPTION_KEY", Fernet.generate_key().decode())
-except Exception as e:
-    print(f"Warning: Could not load secrets from Secret Manager: {e}")
-    SECRET_KEY = os.getenv("JWT_SECRET_KEY", "fallback-dev-key")
-    ENCRYPTION_KEY_VALUE = os.getenv("ENCRYPTION_KEY", Fernet.generate_key().decode())
+def _required_secret(secret_name: str, env_var: str) -> str:
+    value = ""
 
-ENCRYPTION_KEY = ENCRYPTION_KEY_VALUE
-fernet = Fernet(ENCRYPTION_KEY.encode() if isinstance(ENCRYPTION_KEY, str) else ENCRYPTION_KEY)
+    try:
+        from services.secret_manager_service import SecretManagerService
+        secret_manager = SecretManagerService()
+        value = secret_manager.get_secret(secret_name) or ""
+    except Exception as exc:
+        print(f"Warning: Secret Manager unavailable for '{secret_name}': {exc}")
+
+    if not value:
+        value = os.getenv(env_var, "").strip()
+
+    if not value:
+        raise RuntimeError(
+            f"Missing required secret '{secret_name}'. "
+            f"Set Secret Manager value or environment variable {env_var}."
+        )
+
+    return value
+
+SECRET_KEY: Optional[str] = None
+ENCRYPTION_KEY_VALUE: Optional[str] = None
+fernet: Optional[Fernet] = None
+
+def get_secret_key() -> str:
+    global SECRET_KEY
+    if not SECRET_KEY:
+        SECRET_KEY = _required_secret("jwt-secret", "JWT_SECRET_KEY")
+    return SECRET_KEY
+
+def get_fernet() -> Fernet:
+    global ENCRYPTION_KEY_VALUE, fernet
+    if fernet is None:
+        ENCRYPTION_KEY_VALUE = _required_secret("encryption-key", "ENCRYPTION_KEY")
+        encryption_key = ENCRYPTION_KEY_VALUE
+        fernet = Fernet(encryption_key.encode() if isinstance(encryption_key, str) else encryption_key)
+    return fernet
 
 def hash_password(password: str) -> str:
     return pwd_context.hash(password)
@@ -42,12 +67,12 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     else:
         expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    encoded_jwt = jwt.encode(to_encode, get_secret_key(), algorithm=ALGORITHM)
     return encoded_jwt
 
 def verify_token(token: str) -> dict:
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, get_secret_key(), algorithms=[ALGORITHM])
         return payload
     except JWTError:
         return None
@@ -56,7 +81,7 @@ def decode_token(token: str) -> dict:
     return verify_token(token)
 
 def encrypt_credential(credential: str) -> str:
-    return fernet.encrypt(credential.encode()).decode()
+    return get_fernet().encrypt(credential.encode()).decode()
 
 def decrypt_credential(encrypted_credential: str) -> str:
-    return fernet.decrypt(encrypted_credential.encode()).decode()
+    return get_fernet().decrypt(encrypted_credential.encode()).decode()

@@ -23,6 +23,7 @@ from routes.secure_access import router as secure_access_router
 from routes.gateway import router as gateway_router
 from database import connect_db, close_db
 from utils.websocket_manager import manager
+from utils.security import get_secret_key
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -40,11 +41,31 @@ app = FastAPI(
 )
 
 # CORS
-origins = os.getenv("CORS_ORIGINS", "*").split(",")
+def parse_cors_origins():
+    raw_origins = os.getenv("CORS_ORIGINS", "").strip()
+    if raw_origins:
+        origins = [origin.strip() for origin in raw_origins.split(",") if origin.strip()]
+    else:
+        frontend_url = os.getenv("FRONTEND_URL", "").strip()
+        origins = [frontend_url] if frontend_url else [
+            "http://localhost:3000",
+            "http://localhost:5173",
+        ]
+
+    if "*" in origins and len(origins) > 1:
+        raise RuntimeError("CORS_ORIGINS cannot contain '*' with additional origins.")
+
+    allow_credentials = os.getenv("CORS_ALLOW_CREDENTIALS", "true").strip().lower() in {"1", "true", "yes", "on"}
+    if "*" in origins and allow_credentials:
+        raise RuntimeError("Wildcard CORS origin cannot be used when credentials are enabled.")
+
+    return origins, allow_credentials
+
+cors_origins, cors_allow_credentials = parse_cors_origins()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=cors_origins,
+    allow_credentials=cors_allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -97,8 +118,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
     """WebSocket endpoint for real-time dashboard updates"""
     try:
         # Verify JWT token
-        secret_key = os.getenv("JWT_SECRET_KEY", "your-secret-key")
-        payload = jwt.decode(token, secret_key, algorithms=["HS256"])
+        payload = jwt.decode(token, get_secret_key(), algorithms=["HS256"])
         user_email = payload.get("sub")
         
         if not user_email:
