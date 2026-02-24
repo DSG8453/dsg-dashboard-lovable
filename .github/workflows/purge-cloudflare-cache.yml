@@ -6,7 +6,7 @@ on:
       - Deploy Backend to GCP Cloud Run
     types:
       - completed
-  workflow_dispatch:
+  workflow_dispatch: {}
 
 permissions:
   contents: read
@@ -18,14 +18,17 @@ concurrency:
 jobs:
   purge:
     name: Purge Cloudflare cache
-    if: >-
-      ${{
-        github.event_name == 'workflow_dispatch' ||
-        (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
-      }}
     runs-on: ubuntu-latest
     environment: production
     steps:
+      - name: Validate trigger context
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_run" ] && [ "${{ github.event.workflow_run.conclusion }}" != "success" ]; then
+            echo "Upstream deploy did not succeed; skipping cache purge."
+            exit 0
+          fi
+
       - name: Resolve purge payload
         id: payload
         env:
