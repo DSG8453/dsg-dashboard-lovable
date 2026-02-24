@@ -39,18 +39,7 @@ jobs:
           fi
 
           export RAW_URLS="${urls_raw}"
-          payload="$(python3 - <<'PY'
-import json
-import os
-import re
-
-raw = os.environ.get("RAW_URLS", "")
-parts = [p.strip() for p in re.split(r"[\n,]", raw) if p.strip()]
-if not parts:
-    raise SystemExit("No valid URLs found for selective purge")
-print(json.dumps({"files": parts}))
-PY
-)"
+          payload="$(python3 -c 'import json, os, re; raw=os.environ.get("RAW_URLS",""); parts=[p.strip() for p in re.split(r"[\\n,]", raw) if p.strip()]; assert parts, "No valid URLs found for selective purge"; print(json.dumps({"files": parts}))')"
           echo "payload=${payload}" >> "${GITHUB_OUTPUT}"
 
       - name: Purge Cloudflare cache with retry
@@ -77,15 +66,7 @@ PY
               --data "${PAYLOAD}")"
 
             if [ "${status_code}" -ge 200 ] && [ "${status_code}" -lt 300 ]; then
-              if python3 - "${response_file}" <<'PY'
-import json
-import sys
-with open(sys.argv[1], "r", encoding="utf-8") as f:
-    data = json.load(f)
-if not data.get("success"):
-    raise SystemExit(1)
-PY
-              then
+              if python3 -c 'import json, sys; data=json.load(open(sys.argv[1], "r", encoding="utf-8")); raise SystemExit(0 if data.get("success") else 1)' "${response_file}"; then
                 echo "Cloudflare purge completed successfully."
                 rm -f "${response_file}"
                 exit 0
