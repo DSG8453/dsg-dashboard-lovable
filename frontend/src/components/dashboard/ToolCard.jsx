@@ -68,6 +68,7 @@ import { toast } from "sonner";
 
 // DSG Transport Chrome Extension ID (Published in Chrome Web Store)
 const DSG_EXTENSION_ID = 'ecplabhnjcnjbpfggkgmjifakboclhlo';
+const MIN_EXTENSION_VERSION = '1.3.9';
 
 // Icon options for tools
 const iconOptions = [
@@ -123,11 +124,10 @@ export const ToolCard = ({ tool, onDelete, onUpdate }) => {
     // First check saved extension ID
     const savedId = localStorage.getItem('dsg_extension_id');
     
-    // List of extension IDs to try (saved ID first, then user's known ID)
-    const extensionIdsToTry = [
-      savedId,
-      'ecplabhnjcnjbpfggkgmjifakboclhlo', // DSG Transport extension ID
-    ].filter(Boolean);
+    // Always prefer the published store ID first.
+    const extensionIdsToTry = Array.from(
+      new Set([DSG_EXTENSION_ID, savedId].filter(Boolean))
+    );
     
     if (typeof chrome === 'undefined' || !chrome.runtime) {
       setExtensionInstalled(false);
@@ -136,7 +136,7 @@ export const ToolCard = ({ tool, onDelete, onUpdate }) => {
     
     for (const extId of extensionIdsToTry) {
       try {
-        const isInstalled = await new Promise((resolve) => {
+        const extInfo = await new Promise((resolve) => {
           const timeout = setTimeout(() => resolve(false), 1000);
           
           chrome.runtime.sendMessage(
@@ -152,7 +152,10 @@ export const ToolCard = ({ tool, onDelete, onUpdate }) => {
                   localStorage.setItem('dsg_extension_id', extId);
                   console.log('[DSG] Auto-detected extension:', extId);
                 }
-                resolve(true);
+                resolve({
+                  installed: true,
+                  version: response.version || null,
+                });
               } else {
                 resolve(false);
               }
@@ -160,7 +163,7 @@ export const ToolCard = ({ tool, onDelete, onUpdate }) => {
           );
         });
         
-        if (isInstalled) {
+        if (extInfo?.installed) {
           setExtensionInstalled(true);
           return;
         }
@@ -175,11 +178,31 @@ export const ToolCard = ({ tool, onDelete, onUpdate }) => {
   // Legacy check function (kept for compatibility)
   const checkExtensionInstalled = autoDetectExtension;
   
+  const parseVersion = (v) => (v || "0")
+    .split('.')
+    .map((x) => Number.parseInt(x, 10))
+    .map((x) => (Number.isFinite(x) ? x : 0));
+  
+  const isVersionAtLeast = (current, minRequired) => {
+    const a = parseVersion(current);
+    const b = parseVersion(minRequired);
+    const len = Math.max(a.length, b.length, 3);
+    for (let i = 0; i < len; i++) {
+      const ai = a[i] || 0;
+      const bi = b[i] || 0;
+      if (ai > bi) return true;
+      if (ai < bi) return false;
+    }
+    return true;
+  };
+  
   const verifyExtensionReachable = async (extId, timeoutMs = 2500) => {
-    if (!extId || typeof chrome === 'undefined' || !chrome.runtime) return false;
+    if (!extId || typeof chrome === 'undefined' || !chrome.runtime) {
+      return { installed: false, version: null };
+    }
     
     return new Promise((resolve) => {
-      const timeout = setTimeout(() => resolve(false), timeoutMs);
+      const timeout = setTimeout(() => resolve({ installed: false, version: null }), timeoutMs);
       try {
         chrome.runtime.sendMessage(
           extId,
@@ -187,72 +210,51 @@ export const ToolCard = ({ tool, onDelete, onUpdate }) => {
           (response) => {
             clearTimeout(timeout);
             if (chrome.runtime.lastError) {
-              resolve(false);
+              resolve({ installed: false, version: null });
             } else {
-              resolve(Boolean(response?.installed));
+              resolve({
+                installed: Boolean(response?.installed),
+                version: response?.version || null,
+              });
             }
           }
         );
       } catch (err) {
         clearTimeout(timeout);
-        resolve(false);
+        resolve({ installed: false, version: null });
       }
     });
   };
 
   // Handle secure tool access via browser extension
   const handleExtensionAccess = async () => {
-    let extensionId = localStorage.getItem('dsg_extension_id');
+    const savedId = localStorage.getItem('dsg_extension_id');
+    let extensionId = DSG_EXTENSION_ID;
+    let extInfo = await verifyExtensionReachable(extensionId);
     
-    // Try auto-detect if no extension ID saved
-    if (!extensionId) {
-      // Try the known extension ID
-      const knownId = 'ecplabhnjcnjbpfggkgmjifakboclhlo';
-      
-      if (typeof chrome !== 'undefined' && chrome.runtime) {
-        try {
-          const detected = await new Promise((resolve) => {
-            const timeout = setTimeout(() => resolve(false), 1500);
-            chrome.runtime.sendMessage(
-              knownId,
-              { action: 'DSG_CHECK_EXTENSION' },
-              (response) => {
-                clearTimeout(timeout);
-                if (!chrome.runtime.lastError && response?.installed) {
-                  localStorage.setItem('dsg_extension_id', knownId);
-                  resolve(knownId);
-                } else {
-                  resolve(false);
-                }
-              }
-            );
-          });
-          
-          if (detected) {
-            extensionId = detected;
-            toast.success("Extension detected!", {
-              description: "Auto-login is now available",
-            });
-          }
-        } catch (e) {}
+    // Backward-compat for users who stored a custom extension ID.
+    if (!extInfo.installed && savedId && savedId !== extensionId) {
+      const savedInfo = await verifyExtensionReachable(savedId);
+      if (savedInfo.installed) {
+        extensionId = savedId;
+        extInfo = savedInfo;
       }
     }
     
-    if (!extensionId) {
+    if (!extInfo.installed) {
       // Show extension installation dialog
       setExtensionDialogOpen(true);
       setIsAccessingTool(false);
       return;
     }
     
-    // Guard against stale/incorrect saved extension IDs.
-    const extensionReachable = await verifyExtensionReachable(extensionId);
-    if (!extensionReachable) {
-      localStorage.removeItem('dsg_extension_id');
-      setExtensionInstalled(false);
-      setExtensionDialogOpen(true);
-      toast.error("Secure Login Extension not detected", {
-        description: "Please reconnect your extension and try again.",
+    // Persist the validated ID and reflect installation state.
+    localStorage.setItem('dsg_extension_id', extensionId);
+    setExtensionInstalled(true);
+    
+    if (!isVersionAtLeast(extInfo.version, MIN_EXTENSION_VERSION)) {
+      toast.error("Extension update required", {
+        description: `Please update DSG extension to ${MIN_EXTENSION_VERSION}+ (current: ${extInfo.version || 'unknown'}).`,
       });
       setIsAccessingTool(false);
       return;
