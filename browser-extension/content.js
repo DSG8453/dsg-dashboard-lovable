@@ -1,4 +1,4 @@
-// DSG Transport Secure Login - Content Script v1.3.8
+// DSG Transport Secure Login - Content Script v1.3.11
 // Shows OVERLAY to hide login form, fills credentials, auto-submits
 // DETECTS CAPTCHA/2FA: If found, reveals page for user to complete manually
 // User NEVER sees credentials - only masked dots (••••••••)
@@ -249,7 +249,7 @@
   
   function fillAndSubmit(creds) {
     let attempts = 0;
-    const maxAttempts = 15;
+    const maxAttempts = 20;  // Increased for slow SPAs like Ascend
     
     const tryFill = () => {
       attempts++;
@@ -388,12 +388,43 @@
     // Remove any dummy fields we added to body
     document.querySelectorAll('input[name^="fake_"]').forEach(f => f.parentElement?.remove());
     
-    // Click button (keep original field names - don't scramble!)
+    // Focus on password field briefly (helps trigger form validation)
+    passField.focus();
+    
+    // Click button with multiple methods for compatibility
     requestAnimationFrame(() => {
+      // Method 1: Direct click
       btn.click();
       
-      // Backup: form.submit() if click didn't navigate
+      // Method 2: Dispatch click event (for React/Angular/Vue)
+      btn.dispatchEvent(new MouseEvent('click', {
+        bubbles: true,
+        cancelable: true,
+        view: window
+      }));
+      
+      // Method 3: If it's a link, trigger navigation
+      if (btn.tagName === 'A' && btn.href) {
+        setTimeout(() => {
+          if (document.contains(btn)) {
+            window.location.href = btn.href;
+          }
+        }, 300);
+      }
+      
+      // Method 4: Form submit as backup
       if (form) {
+        setTimeout(() => {
+          if (document.contains(btn)) {
+            try {
+              // Try Enter key on password field
+              passField.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true }));
+              passField.dispatchEvent(new KeyboardEvent('keypress', { key: 'Enter', keyCode: 13, bubbles: true }));
+              passField.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', keyCode: 13, bubbles: true }));
+            } catch (e) {}
+          }
+        }, 200);
+        
         setTimeout(() => {
           if (document.contains(btn)) {
             try {
@@ -401,11 +432,11 @@
               else form.submit();
             } catch (e) {}
           }
-        }, 400);
+        }, 500);
       }
       
       // Hide overlay after redirect starts
-      setTimeout(hideLoadingOverlay, 1500);
+      setTimeout(hideLoadingOverlay, 2000);
     });
     
     chrome.runtime.sendMessage({ action: 'LOGIN_SUCCESS' });
@@ -415,9 +446,18 @@
   
   function findUsernameField(preferredName) {
     const selectors = [
+      // Preferred name from tool config
       `input[name="${preferredName}"]`,
       `input[id="${preferredName}"]`,
       `input[name="${preferredName?.replace(/\$/g, '_')}"]`,
+      // Ascend TMS specific
+      'input[name="username"]',
+      'input[id="username"]',
+      'input[name="loginId"]',
+      'input[id="loginId"]',
+      'input[name="userId"]',
+      'input[id="userId"]',
+      // Common patterns
       `input[name*="txtUserName" i]`,
       `input[name*="UserName" i]`,
       `input[id*="txtUserName" i]`,
@@ -430,9 +470,15 @@
       'input[autocomplete="username"]',
       'input[placeholder*="email" i]',
       'input[placeholder*="user" i]',
+      'input[placeholder*="login" i]',
       'input[name="Email"]',
       'input[name="LOGIN_ID"]',
-      'form input[type="text"]:first-of-type'
+      // RMIS specific
+      'input[name="j_username"]',
+      'input[id="j_username"]',
+      // Generic fallbacks
+      'form input[type="text"]:first-of-type',
+      'input[type="text"]:not([hidden])'
     ];
     
     for (const sel of selectors) {
@@ -452,17 +498,27 @@
   
   function findPasswordField(preferredName) {
     const selectors = [
+      // Preferred name from tool config
       `input[name="${preferredName}"]`,
       `input[id="${preferredName}"]`,
       `input[name="${preferredName?.replace(/\$/g, '_')}"]`,
+      // Standard password field (most common)
+      'input[type="password"]',
+      // Ascend TMS specific
+      'input[name="password"]',
+      'input[id="password"]',
+      // RMIS specific
+      'input[name="j_password"]',
+      'input[id="j_password"]',
+      // Common patterns
       `input[name*="txtPassword" i]`,
       `input[id*="txtPassword" i]`,
-      'input[type="password"]',
       'input[name*="pass" i]',
       'input[name*="pwd" i]',
       'input[id*="pass" i]',
       'input[autocomplete="current-password"]',
-      'input[name="PASSWORD"]'
+      'input[name="PASSWORD"]',
+      'input[placeholder*="password" i]'
     ];
     
     for (const sel of selectors) {
@@ -486,7 +542,19 @@
       'input[id*="btnLogin" i]',
       'input[name*="btnSubmit" i]',
       '.btn-login', '.btn-signin',
-      'form button:not([type="button"])'
+      'form button:not([type="button"])',
+      // RMIS and other systems
+      'input[type="button"][value*="Login" i]',
+      'input[type="button"][value*="Sign" i]',
+      'a.btn[href*="login" i]',
+      'a.button[href*="login" i]',
+      // Ascend TMS
+      'button[data-action*="login" i]',
+      'button[ng-click*="login" i]',
+      'button[onclick*="login" i]',
+      // Generic submit buttons
+      '[role="button"][class*="login" i]',
+      '[role="button"][class*="submit" i]'
     ];
     
     for (const sel of selectors) {
@@ -496,11 +564,19 @@
       } catch (e) {}
     }
     
-    // Text search
-    const btns = document.querySelectorAll('button, input[type="submit"], input[type="button"]');
-    for (const btn of btns) {
+    // Text search - expanded to include more elements
+    const clickables = document.querySelectorAll('button, input[type="submit"], input[type="button"], a.btn, a.button, [role="button"], div[onclick], span[onclick]');
+    for (const btn of clickables) {
+      const text = (btn.textContent || btn.value || btn.getAttribute('value') || '').toLowerCase().trim();
+      if ((text === 'login' || text === 'log in' || text === 'sign in' || text === 'signin' || text === 'submit' || text === 'continue') && isVisible(btn)) {
+        return btn;
+      }
+    }
+    
+    // Partial text match
+    for (const btn of clickables) {
       const text = (btn.textContent || btn.value || '').toLowerCase();
-      if ((text.includes('sign in') || text.includes('log in') || text.includes('login') || text.includes('submit')) && isVisible(btn)) {
+      if ((text.includes('sign in') || text.includes('log in') || text.includes('login')) && isVisible(btn) && !isSkipButton(btn)) {
         return btn;
       }
     }
@@ -509,7 +585,7 @@
     const forms = document.querySelectorAll('form');
     for (const form of forms) {
       if (form.querySelector('input[type="password"]')) {
-        const btn = form.querySelector('button, input[type="submit"]');
+        const btn = form.querySelector('button, input[type="submit"], input[type="button"], a.btn');
         if (btn && isVisible(btn)) return btn;
       }
     }
