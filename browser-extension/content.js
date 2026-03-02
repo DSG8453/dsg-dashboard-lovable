@@ -1,4 +1,4 @@
-// DSG Transport Secure Login - Content Script v1.3.12
+// DSG Transport Secure Login - Content Script v1.3.13
 // Shows OVERLAY to hide login form, fills credentials, auto-submits
 // DETECTS CAPTCHA/2FA: If found, reveals page for user to complete manually
 // User NEVER sees credentials - only masked dots (••••••••)
@@ -590,30 +590,46 @@
   }
   
   function findLoginButton() {
+    // PRIORITY 1: Submit button inside form with password field (most reliable)
+    const forms = document.querySelectorAll('form');
+    for (const form of forms) {
+      if (form.querySelector('input[type="password"]')) {
+        // Look for submit button first
+        const submitBtn = form.querySelector('button[type="submit"], input[type="submit"]');
+        if (submitBtn && isVisible(submitBtn) && !isSkipButton(submitBtn)) {
+          return submitBtn;
+        }
+        // Then any button that's not an SSO button
+        const btns = form.querySelectorAll('button, input[type="button"]');
+        for (const btn of btns) {
+          if (isVisible(btn) && !isSkipButton(btn)) {
+            const text = (btn.textContent || btn.value || '').toLowerCase();
+            // Make sure it looks like a login button
+            if (text.includes('login') || text.includes('sign in') || text.includes('submit') || text.includes('continue') || text === 'log in') {
+              return btn;
+            }
+          }
+        }
+      }
+    }
+    
+    // PRIORITY 2: Specific login button selectors
     const selectors = [
       'button[type="submit"]',
       'input[type="submit"]',
-      'button[id*="login" i]',
-      'button[id*="signin" i]',
-      'button[class*="login" i]',
-      'button[class*="signin" i]',
+      'button[id*="login" i]:not([id*="social"]):not([id*="apple"]):not([id*="google"])',
+      'button[id*="signin" i]:not([id*="social"]):not([id*="apple"]):not([id*="google"])',
+      'button[class*="login" i]:not([class*="social"]):not([class*="apple"]):not([class*="google"])',
+      'button[class*="signin" i]:not([class*="social"]):not([class*="apple"]):not([class*="google"])',
       'input[name*="btnLogin" i]',
       'input[id*="btnLogin" i]',
       'input[name*="btnSubmit" i]',
       '.btn-login', '.btn-signin',
-      'form button:not([type="button"])',
-      // RMIS and other systems
-      'input[type="button"][value*="Login" i]',
-      'input[type="button"][value*="Sign" i]',
-      'a.btn[href*="login" i]',
-      'a.button[href*="login" i]',
-      // Ascend TMS
       'button[data-action*="login" i]',
       'button[ng-click*="login" i]',
       'button[onclick*="login" i]',
-      // Generic submit buttons
-      '[role="button"][class*="login" i]',
-      '[role="button"][class*="submit" i]'
+      'input[type="button"][value*="Login" i]',
+      'input[type="button"][value*="Sign In" i]'
     ];
     
     for (const sel of selectors) {
@@ -623,29 +639,32 @@
       } catch (e) {}
     }
     
-    // Text search - expanded to include more elements
-    const clickables = document.querySelectorAll('button, input[type="submit"], input[type="button"], a.btn, a.button, [role="button"], div[onclick], span[onclick]');
+    // PRIORITY 3: Exact text match (strict - avoid SSO buttons)
+    const clickables = document.querySelectorAll('button, input[type="submit"], input[type="button"]');
     for (const btn of clickables) {
-      const text = (btn.textContent || btn.value || btn.getAttribute('value') || '').toLowerCase().trim();
-      if ((text === 'login' || text === 'log in' || text === 'sign in' || text === 'signin' || text === 'submit' || text === 'continue') && isVisible(btn)) {
+      const text = (btn.textContent || btn.value || '').toLowerCase().trim();
+      // Only exact matches to avoid "Sign in with Apple" matching "Sign in"
+      if ((text === 'login' || text === 'log in' || text === 'sign in' || text === 'signin' || text === 'submit') && isVisible(btn) && !isSkipButton(btn)) {
         return btn;
       }
     }
     
-    // Partial text match
+    // PRIORITY 4: Primary/main button in login context
     for (const btn of clickables) {
       const text = (btn.textContent || btn.value || '').toLowerCase();
-      if ((text.includes('sign in') || text.includes('log in') || text.includes('login')) && isVisible(btn) && !isSkipButton(btn)) {
+      const btnClass = (btn.className || '').toLowerCase();
+      // Look for primary/main button styling
+      if ((btnClass.includes('primary') || btnClass.includes('main') || btnClass.includes('submit')) && 
+          isVisible(btn) && !isSkipButton(btn)) {
         return btn;
       }
     }
     
-    // Any submit in form with password
-    const forms = document.querySelectorAll('form');
+    // PRIORITY 5: Form button fallback (last resort)
     for (const form of forms) {
       if (form.querySelector('input[type="password"]')) {
-        const btn = form.querySelector('button, input[type="submit"], input[type="button"], a.btn');
-        if (btn && isVisible(btn)) return btn;
+        const btn = form.querySelector('button:not([type="button"]), input[type="submit"]');
+        if (btn && isVisible(btn) && !isSkipButton(btn)) return btn;
       }
     }
     
@@ -654,7 +673,46 @@
   
   function isSkipButton(el) {
     const text = (el.textContent || el.value || '').toLowerCase();
-    return text.includes('forgot') || text.includes('register') || text.includes('sign up') || text.includes('create');
+    
+    // Skip these button types
+    if (text.includes('forgot') || text.includes('register') || text.includes('sign up') || text.includes('create')) {
+      return true;
+    }
+    
+    // Skip SSO/OAuth buttons (Google, Apple, Microsoft, Facebook, etc.)
+    const ssoKeywords = [
+      'apple', 'google', 'microsoft', 'facebook', 'twitter', 'linkedin',
+      'github', 'sso', 'oauth', 'saml', 'okta', 'azure', 'aws',
+      'sign in with', 'continue with', 'log in with'
+    ];
+    
+    for (const keyword of ssoKeywords) {
+      if (text.includes(keyword)) {
+        return true;
+      }
+    }
+    
+    // Skip buttons with SSO-related classes or IDs
+    const elClass = (el.className || '').toLowerCase();
+    const elId = (el.id || '').toLowerCase();
+    const ssoClassKeywords = ['apple', 'google', 'social', 'oauth', 'sso', 'microsoft', 'facebook'];
+    
+    for (const keyword of ssoClassKeywords) {
+      if (elClass.includes(keyword) || elId.includes(keyword)) {
+        return true;
+      }
+    }
+    
+    // Skip buttons with SSO images/icons
+    const img = el.querySelector('img');
+    if (img) {
+      const src = (img.src || '').toLowerCase();
+      if (src.includes('apple') || src.includes('google') || src.includes('microsoft') || src.includes('facebook')) {
+        return true;
+      }
+    }
+    
+    return false;
   }
   
   function isVisible(el) {
