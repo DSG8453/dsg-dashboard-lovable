@@ -1,12 +1,14 @@
-// DSG Transport Secure Login - Content Script v1.3.3
+// DSG Transport Secure Login - Content Script v1.3.4
 // Shows OVERLAY to hide login form, fills credentials, auto-submits
-// User NEVER sees login form - only sees DSG loading screen
+// Overlay stays until login is FULLY complete (page navigates or SPA updates)
 
 (function() {
   'use strict';
   
   let loadingOverlay = null;
   let loginAttempted = false;
+  let initialUrl = window.location.href;
+  let overlayStatusText = null;
   
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
@@ -52,7 +54,7 @@
         <div class="dsg-loading-spinner"></div>
         <div class="dsg-loading-logo">DSG Transport</div>
         <div class="dsg-loading-text">Connecting to ${displayName}...</div>
-        <div class="dsg-loading-subtext">Securely logging you in</div>
+        <div class="dsg-loading-subtext" id="dsg-status-text">Securely logging you in</div>
       </div>
     `;
     
@@ -75,12 +77,20 @@
         -webkit-background-clip: text; -webkit-text-fill-color: transparent;
       }
       .dsg-loading-text { font-size: 18px; font-weight: 500; margin-bottom: 8px; color: #fff; }
-      .dsg-loading-subtext { font-size: 14px; color: #94a3b8; }
+      .dsg-loading-subtext { font-size: 14px; color: #94a3b8; transition: opacity 0.2s ease; }
       @keyframes dsg-spin { to { transform: rotate(360deg); } }
     `;
     
     document.head.appendChild(style);
     document.body.appendChild(loadingOverlay);
+    
+    overlayStatusText = document.getElementById('dsg-status-text');
+  }
+  
+  function updateOverlayStatus(text) {
+    if (overlayStatusText) {
+      overlayStatusText.textContent = text;
+    }
   }
   
   function hideLoadingOverlay() {
@@ -91,8 +101,65 @@
         loadingOverlay?.remove();
         document.getElementById('dsg-loading-styles')?.remove();
         loadingOverlay = null;
+        overlayStatusText = null;
       }, 300);
     }
+  }
+  
+  // Wait for login to complete: watches for page navigation, URL change, or login form disappearing
+  function waitForLoginComplete(onComplete, maxWaitMs) {
+    const startTime = Date.now();
+    const startUrl = window.location.href;
+    let resolved = false;
+    
+    const finish = () => {
+      if (resolved) return;
+      resolved = true;
+      onComplete();
+    };
+    
+    // 1. Traditional navigation: page unloads -> overlay destroyed with it, nothing to do.
+    //    But if the page does a client-side redirect or SPA navigation, we detect below.
+    
+    // 2. Detect URL change (works for SPA and History API navigations)
+    const urlCheckInterval = setInterval(() => {
+      if (resolved) { clearInterval(urlCheckInterval); return; }
+      
+      if (window.location.href !== startUrl) {
+        clearInterval(urlCheckInterval);
+        updateOverlayStatus('Login successful, loading...');
+        setTimeout(finish, 800);
+      }
+    }, 300);
+    
+    // 3. Detect login form disappearing (SPA that doesn't change URL)
+    const formCheckInterval = setInterval(() => {
+      if (resolved) { clearInterval(formCheckInterval); return; }
+      
+      const hasPasswordField = document.querySelector('input[type="password"]');
+      const hasLoginForm = document.querySelector('form');
+      
+      if (!hasPasswordField && !hasLoginForm) {
+        clearInterval(formCheckInterval);
+        clearInterval(urlCheckInterval);
+        updateOverlayStatus('Login successful!');
+        setTimeout(finish, 500);
+      }
+    }, 500);
+    
+    // 4. Safety timeout: never leave the user stuck
+    setTimeout(() => {
+      clearInterval(urlCheckInterval);
+      clearInterval(formCheckInterval);
+      finish();
+    }, maxWaitMs);
+    
+    // 5. Page unload means traditional navigation is happening -- overlay dies with the page
+    window.addEventListener('beforeunload', () => {
+      clearInterval(urlCheckInterval);
+      clearInterval(formCheckInterval);
+      resolved = true;
+    });
   }
   
   function fillAndSubmit(creds) {
@@ -106,12 +173,14 @@
       const passField = findPasswordField(creds.passwordField);
       
       if (userField && passField) {
+        updateOverlayStatus('Filling credentials...');
         preventPasswordSave(userField, passField);
         
         fillInput(userField, creds.username);
         
         setTimeout(() => {
           fillInput(passField, creds.password);
+          updateOverlayStatus('Submitting login...');
           
           setTimeout(() => {
             const btn = findLoginButton();
@@ -123,15 +192,17 @@
                 scrambleFieldsBeforeSubmit(userField, passField);
                 form.submit();
               }
-              setTimeout(hideLoadingOverlay, 1500);
+              waitForLoginComplete(hideLoadingOverlay, 30000);
             }
           }, 400);
         }, 300);
         
       } else if (attempts < maxAttempts) {
+        updateOverlayStatus(`Looking for login form... (${attempts}/${maxAttempts})`);
         setTimeout(tryFill, 600);
       } else {
-        hideLoadingOverlay();
+        updateOverlayStatus('Could not find login form');
+        setTimeout(hideLoadingOverlay, 2000);
         chrome.runtime.sendMessage({ action: 'LOGIN_FAILED' });
       }
     };
@@ -173,7 +244,6 @@
   }
   
   function interceptPasswordSavePrompt() {
-    const origCredCreate = navigator.credentials?.store;
     if (navigator.credentials) {
       navigator.credentials.store = function() { return Promise.resolve(); };
     }
@@ -211,6 +281,8 @@
     
     if (form) form.setAttribute('autocomplete', 'off');
     
+    updateOverlayStatus('Logging in, please wait...');
+    
     requestAnimationFrame(() => {
       btn.click();
       
@@ -225,8 +297,7 @@
         }, 500);
       }
       
-      setTimeout(hideLoadingOverlay, 2000);
-      
+      // Restore original field names/ids in case login shows validation error
       setTimeout(() => {
         if (document.contains(userField)) {
           userField.name = origUserName;
@@ -239,6 +310,10 @@
         }
       }, 800);
     });
+    
+    // Overlay stays until login actually completes (navigation, URL change, or form gone)
+    // 30-second safety net so user is never stuck
+    waitForLoginComplete(hideLoadingOverlay, 30000);
     
     chrome.runtime.sendMessage({ action: 'LOGIN_SUCCESS' });
   }
