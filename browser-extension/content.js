@@ -1,4 +1,4 @@
-// DSG Transport Secure Login - Content Script v1.3.11
+// DSG Transport Secure Login - Content Script v1.3.12
 // Shows OVERLAY to hide login form, fills credentials, auto-submits
 // DETECTS CAPTCHA/2FA: If found, reveals page for user to complete manually
 // User NEVER sees credentials - only masked dots (••••••••)
@@ -435,11 +435,70 @@
         }, 500);
       }
       
-      // Hide overlay after redirect starts
-      setTimeout(hideLoadingOverlay, 2000);
+      // WAIT FOR LOGIN TO COMPLETE - Don't hide until navigated or logged in
+      waitForLoginComplete();
     });
     
     chrome.runtime.sendMessage({ action: 'LOGIN_SUCCESS' });
+  }
+  
+  // Wait for login to actually complete before hiding overlay
+  function waitForLoginComplete() {
+    const startUrl = window.location.href;
+    const startTime = Date.now();
+    const maxWait = 30000; // Maximum 30 seconds
+    let checkCount = 0;
+    
+    const checkLogin = () => {
+      checkCount++;
+      const elapsed = Date.now() - startTime;
+      
+      // Check 1: URL changed (navigated to new page)
+      if (window.location.href !== startUrl) {
+        hideLoadingOverlay();
+        return;
+      }
+      
+      // Check 2: Login form is gone (password field removed)
+      const passField = document.querySelector('input[type="password"]');
+      if (!passField || !isVisible(passField)) {
+        // Password field gone - likely logged in
+        setTimeout(hideLoadingOverlay, 500);
+        return;
+      }
+      
+      // Check 3: Error message appeared (login failed)
+      const errorSelectors = [
+        '[class*="error" i]',
+        '[class*="invalid" i]',
+        '[class*="fail" i]',
+        '[id*="error" i]',
+        '.alert-danger',
+        '.alert-error'
+      ];
+      for (const sel of errorSelectors) {
+        try {
+          const err = document.querySelector(sel);
+          if (err && isVisible(err) && err.textContent.length > 0) {
+            // Error detected - hide overlay so user can see
+            hideLoadingOverlay();
+            return;
+          }
+        } catch (e) {}
+      }
+      
+      // Check 4: Maximum time reached
+      if (elapsed >= maxWait) {
+        hideLoadingOverlay();
+        return;
+      }
+      
+      // Continue checking every 500ms
+      setTimeout(checkLogin, 500);
+    };
+    
+    // Start checking after initial submit delay
+    setTimeout(checkLogin, 1000);
   }
   
   // ============ FIELD FINDING ============
