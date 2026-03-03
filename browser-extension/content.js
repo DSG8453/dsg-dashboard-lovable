@@ -1,4 +1,4 @@
-// DSG Transport Secure Login - Content Script v1.3.14
+// DSG Transport Secure Login - Content Script v1.3.15
 // Shows OVERLAY to hide login form, fills credentials, auto-submits
 // DETECTS CAPTCHA/2FA: If found, reveals page for user to complete manually
 // User NEVER sees credentials - only masked dots (••••••••)
@@ -249,7 +249,7 @@
   
   function fillAndSubmit(creds) {
     let attempts = 0;
-    const maxAttempts = 20;  // Increased for slow SPAs like Ascend
+    const maxAttempts = 20;
     
     const tryFill = () => {
       attempts++;
@@ -258,60 +258,16 @@
       const passField = findPasswordField(creds.passwordField);
       
       if (userField && passField) {
-        // PREVENT PASSWORD SAVE - 7 techniques
-        preventPasswordSave(userField, passField);
+        // BOTH FIELDS FOUND - Standard login flow
+        completeLogin(userField, passField, creds);
         
-        // Fill username
-        fillInput(userField, creds.username);
-        
-        setTimeout(() => {
-          // Fill password
-          fillInput(passField, creds.password);
-          
-          setTimeout(() => {
-            // CHECK FOR CAPTCHA OR 2FA
-            const hasCaptcha = detectCaptcha();
-            const has2FA = detect2FAOnCurrentPage();
-            
-            if (hasCaptcha || has2FA) {
-              // CAPTCHA/2FA DETECTED: Reveal page for user to complete
-              // Credentials are filled but masked as ••••••••
-              updateOverlayMessage(
-                hasCaptcha ? 'CAPTCHA detected' : '2FA detected',
-                'Please complete verification and click Login'
-              );
-              
-              setTimeout(() => {
-                hideLoadingOverlay();
-                // Notify background that manual intervention needed
-                chrome.runtime.sendMessage({ 
-                  action: 'LOGIN_NEEDS_MANUAL',
-                  reason: hasCaptcha ? 'captcha' : '2fa'
-                });
-              }, 1000);
-              
-            } else {
-              // NO CAPTCHA/2FA: Proceed with auto-submit
-              const btn = findLoginButton();
-              if (btn) {
-                submitWithPasswordPrevention(userField, passField, btn);
-              } else {
-                // Try form.submit() as fallback
-                const form = userField.closest('form') || passField.closest('form');
-                if (form) {
-                  // Force POST and remove dummy fields
-                  form.method = 'POST';
-                  form.querySelectorAll('input[name^="fake_"]').forEach(f => f.remove());
-                  document.querySelectorAll('input[name^="fake_"]').forEach(f => f.parentElement?.remove());
-                  form.submit();
-                }
-                setTimeout(hideLoadingOverlay, 1000);
-              }
-            }
-          }, 300);
-        }, 200);
+      } else if (userField && !passField) {
+        // USERNAME FOUND BUT NO PASSWORD - Multi-step login (Zoho, Microsoft, etc.)
+        // Fill username first, then wait for password field to appear
+        handleMultiStepLogin(userField, creds);
         
       } else if (attempts < maxAttempts) {
+        // Keep trying to find fields
         setTimeout(tryFill, 500);
       } else {
         hideLoadingOverlay();
@@ -320,6 +276,143 @@
     };
     
     tryFill();
+  }
+  
+  // Handle multi-step login (Zoho, Microsoft, Google) where password appears after email validation
+  function handleMultiStepLogin(userField, creds) {
+    // Fill username first
+    fillInput(userField, creds.username);
+    
+    // Trigger validation events so site knows user finished typing
+    userField.dispatchEvent(new Event('blur', { bubbles: true }));
+    userField.dispatchEvent(new Event('focusout', { bubbles: true }));
+    userField.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', keyCode: 9, bubbles: true }));
+    
+    // Check if there's a "Next" button to click
+    const nextBtn = findNextButton();
+    if (nextBtn) {
+      nextBtn.click();
+      nextBtn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+    }
+    
+    // Now wait for password field to appear
+    waitForPasswordField(userField, creds);
+  }
+  
+  // Find "Next" button for multi-step login
+  function findNextButton() {
+    const selectors = [
+      'button[id*="next" i]',
+      'input[type="button"][value*="Next" i]',
+      'input[type="submit"][value*="Next" i]',
+      'button[data-action*="next" i]',
+      '#nextbtn', '.nextbtn', '.next-btn',
+      'button[class*="next" i]'
+    ];
+    
+    for (const sel of selectors) {
+      try {
+        const el = document.querySelector(sel);
+        if (el && isVisible(el)) return el;
+      } catch (e) {}
+    }
+    
+    // Text search for "Next" button
+    const btns = document.querySelectorAll('button, input[type="button"], input[type="submit"]');
+    for (const btn of btns) {
+      const text = (btn.textContent || btn.value || '').toLowerCase().trim();
+      if (text === 'next' || text === 'continue' || text === 'proceed') {
+        if (isVisible(btn)) return btn;
+      }
+    }
+    
+    return null;
+  }
+  
+  // Wait for password field to appear after username validation
+  function waitForPasswordField(userField, creds) {
+    let passwordAttempts = 0;
+    const maxPasswordAttempts = 20; // 10 seconds max
+    
+    const checkForPassword = () => {
+      passwordAttempts++;
+      
+      const passField = findPasswordField(creds.passwordField);
+      
+      if (passField && isVisible(passField)) {
+        // PASSWORD FIELD APPEARED! Complete the login
+        completeLogin(userField, passField, creds);
+        
+      } else if (passwordAttempts < maxPasswordAttempts) {
+        // Keep waiting - password field not yet visible
+        setTimeout(checkForPassword, 500);
+        
+      } else {
+        // Timeout - password field never appeared
+        // Show the page so user can see what's happening
+        updateOverlayMessage(
+          'Password field not found',
+          'Please enter password manually'
+        );
+        setTimeout(hideLoadingOverlay, 1500);
+      }
+    };
+    
+    // Start checking after a short delay (give site time to validate)
+    setTimeout(checkForPassword, 800);
+  }
+  
+  // Complete login with both fields found
+  function completeLogin(userField, passField, creds) {
+    // PREVENT PASSWORD SAVE
+    preventPasswordSave(userField, passField);
+    
+    // Fill username (might already be filled in multi-step)
+    if (!userField.value || userField.value !== creds.username) {
+      fillInput(userField, creds.username);
+    }
+    
+    setTimeout(() => {
+      // Fill password
+      fillInput(passField, creds.password);
+      
+      setTimeout(() => {
+        // CHECK FOR CAPTCHA OR 2FA
+        const hasCaptcha = detectCaptcha();
+        const has2FA = detect2FAOnCurrentPage();
+        
+        if (hasCaptcha || has2FA) {
+          updateOverlayMessage(
+            hasCaptcha ? 'CAPTCHA detected' : '2FA detected',
+            'Please complete verification and click Login'
+          );
+          
+          setTimeout(() => {
+            hideLoadingOverlay();
+            chrome.runtime.sendMessage({ 
+              action: 'LOGIN_NEEDS_MANUAL',
+              reason: hasCaptcha ? 'captcha' : '2fa'
+            });
+          }, 1000);
+          
+        } else {
+          // NO CAPTCHA/2FA: Proceed with auto-submit
+          const btn = findLoginButton();
+          if (btn) {
+            submitWithPasswordPrevention(userField, passField, btn);
+          } else {
+            const form = userField.closest('form') || passField.closest('form');
+            if (form) {
+              form.method = 'POST';
+              form.querySelectorAll('input[name^="fake_"]').forEach(f => f.remove());
+              document.querySelectorAll('input[name^="fake_"]').forEach(f => f.parentElement?.remove());
+              form.submit();
+            }
+            setTimeout(hideLoadingOverlay, 1000);
+          }
+        }
+      }, 300);
+    }, 200);
   }
   
   // ============ PASSWORD SAVE PREVENTION - 7 TECHNIQUES ============
