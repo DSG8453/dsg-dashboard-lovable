@@ -1,4 +1,4 @@
-// DSG Transport Secure Login - Content Script v1.3.21
+// DSG Transport Secure Login - Content Script v1.3.22
 // Shows OVERLAY to hide login form, fills credentials, auto-submits
 // DETECTS CAPTCHA/2FA: If found, reveals page for user to complete manually
 // User NEVER sees credentials - only masked dots (••••••••)
@@ -24,9 +24,21 @@
     }
     
     chrome.runtime.sendMessage({ action: 'GET_PENDING_LOGIN' }, (pending) => {
-      if (chrome.runtime.lastError || !pending || loginAttempted) return;
+      if (chrome.runtime.lastError) {
+        console.log('[DSG] Error getting pending login');
+        return;
+      }
+      if (!pending) {
+        console.log('[DSG] No pending login for this page');
+        return;
+      }
+      if (loginAttempted) {
+        console.log('[DSG] Login already attempted');
+        return;
+      }
       
       loginAttempted = true;
+      console.log('[DSG] Starting login for:', pending.toolName);
       
       // IMMEDIATELY show overlay - user never sees login form
       showLoadingOverlay(pending.toolName);
@@ -333,22 +345,29 @@
     // Store creds for retry functionality
     currentCreds = creds;
     
+    console.log('[DSG] fillAndSubmit - has username:', !!creds.username, '- has password:', !!creds.password);
+    
     const tryFill = () => {
       attempts++;
       
       const userField = findUsernameField(creds.usernameField);
       const passField = findPasswordField(creds.passwordField);
       
+      console.log('[DSG] Attempt', attempts, '- user:', !!userField, '- pass:', !!passField);
+      
       if (userField && passField) {
         // BOTH FIELDS FOUND - Standard login flow
+        console.log('[DSG] Both fields found - completing login');
         completeLogin(userField, passField, creds);
         
       } else if (userField && !passField) {
         // USERNAME FOUND BUT NO PASSWORD - Multi-step login (Zoho, Microsoft, etc.)
+        console.log('[DSG] Multi-step login - username only');
         handleMultiStepLogin(userField, creds);
         
       } else if (!userField && passField) {
         // ONLY PASSWORD FOUND - Second step of multi-step login (page reloaded)
+        console.log('[DSG] Password step - filling password');
         handlePasswordOnlyStep(passField, creds);
         
       } else if (attempts < maxAttempts) {
@@ -356,6 +375,7 @@
         setTimeout(tryFill, 500);
       } else {
         // Don't hide overlay - show retry options
+        console.log('[DSG] FAILED - no fields found after', maxAttempts, 'attempts');
         showRetryOverlay('Login fields not found', creds);
         chrome.runtime.sendMessage({ action: 'LOGIN_FAILED' });
       }
