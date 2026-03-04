@@ -1,4 +1,4 @@
-// DSG Transport Secure Login - Content Script v1.3.24
+// DSG Transport Secure Login - Content Script v1.3.25
 // Shows OVERLAY to hide login form, fills credentials, auto-submits
 // DETECTS CAPTCHA/2FA: If found, reveals page for user to complete manually
 // User NEVER sees credentials - only masked dots (••••••••)
@@ -49,8 +49,19 @@
       // IMMEDIATELY show overlay - user never sees login form
       showLoadingOverlay(pending.toolName);
       
-      // Fill credentials behind the overlay
-      setTimeout(() => fillAndSubmit(pending), 500);
+      // Wait for page to fully load before filling (longer delay for slow connections)
+      const startFill = () => {
+        if (document.readyState === 'complete') {
+          setTimeout(() => fillAndSubmit(pending), 1000); // Extra delay after page complete
+        } else {
+          window.addEventListener('load', () => {
+            setTimeout(() => fillAndSubmit(pending), 1000);
+          });
+          // Fallback if load already fired
+          setTimeout(() => fillAndSubmit(pending), 2000);
+        }
+      };
+      startFill();
     });
   }
   
