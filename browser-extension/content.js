@@ -1,4 +1,4 @@
-// DSG Transport Secure Login - Content Script v1.3.17
+// DSG Transport Secure Login - Content Script v1.3.18
 // Shows OVERLAY to hide login form, fills credentials, auto-submits
 // DETECTS CAPTCHA/2FA: If found, reveals page for user to complete manually
 // User NEVER sees credentials - only masked dots (••••••••)
@@ -17,16 +17,34 @@
   }
   
   function init() {
+    // DEBUG: Log that content script is running
+    console.log('[DSG] Content script initialized on:', window.location.href);
+    
     // Check if this is a 2FA page (no username/password fields, has code input)
     if (detect2FAPage()) {
-      // This is a 2FA page after login - just hide any overlay and let user proceed
+      console.log('[DSG] 2FA page detected - skipping auto-login');
       hideLoadingOverlay();
       return;
     }
     
+    console.log('[DSG] Checking for pending login...');
     chrome.runtime.sendMessage({ action: 'GET_PENDING_LOGIN' }, (pending) => {
-      if (chrome.runtime.lastError || !pending || loginAttempted) return;
+      console.log('[DSG] Pending login response:', pending ? 'YES' : 'NONE');
+      if (chrome.runtime.lastError) {
+        console.log('[DSG] Error:', chrome.runtime.lastError.message);
+        return;
+      }
+      if (!pending) {
+        console.log('[DSG] No pending login - page opened normally');
+        return;
+      }
+      if (loginAttempted) {
+        console.log('[DSG] Login already attempted - skipping');
+        return;
+      }
+      
       loginAttempted = true;
+      console.log('[DSG] Starting auto-login for tool:', pending.toolName);
       
       // IMMEDIATELY show overlay - user never sees login form
       showLoadingOverlay(pending.toolName);
