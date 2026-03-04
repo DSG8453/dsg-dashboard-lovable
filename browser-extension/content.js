@@ -1,4 +1,4 @@
-// DSG Transport Secure Login - Content Script v1.3.18
+// DSG Transport Secure Login - Content Script v1.3.19
 // Shows OVERLAY to hide login form, fills credentials, auto-submits
 // DETECTS CAPTCHA/2FA: If found, reveals page for user to complete manually
 // User NEVER sees credentials - only masked dots (••••••••)
