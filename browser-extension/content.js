@@ -1,4 +1,4 @@
-// DSG Transport Secure Login - Content Script v1.3.19
+// DSG Transport Secure Login - Content Script v1.3.20
 // Shows OVERLAY to hide login form, fills credentials, auto-submits
 // DETECTS CAPTCHA/2FA: If found, reveals page for user to complete manually
 // User NEVER sees credentials - only masked dots (••••••••)
@@ -365,14 +365,24 @@
       const userField = findUsernameField(creds.usernameField);
       const passField = findPasswordField(creds.passwordField);
       
+      console.log('[DSG] Attempt', attempts, '- Username field:', userField ? 'FOUND' : 'NOT FOUND', '- Password field:', passField ? 'FOUND' : 'NOT FOUND');
+      
       if (userField && passField) {
         // BOTH FIELDS FOUND - Standard login flow
+        console.log('[DSG] Both fields found - standard login');
         completeLogin(userField, passField, creds);
         
       } else if (userField && !passField) {
         // USERNAME FOUND BUT NO PASSWORD - Multi-step login (Zoho, Microsoft, etc.)
         // Fill username first, then wait for password field to appear
+        console.log('[DSG] Only username found - multi-step login step 1');
         handleMultiStepLogin(userField, creds);
+        
+      } else if (!userField && passField) {
+        // ONLY PASSWORD FOUND - Second step of multi-step login (page reloaded)
+        // Username was filled on previous page load, now fill password
+        console.log('[DSG] Only password found - multi-step login step 2 (page reloaded)');
+        handlePasswordOnlyStep(passField, creds);
         
       } else if (attempts < maxAttempts) {
         // Keep trying to find fields
@@ -387,6 +397,58 @@
     tryFill();
   }
   
+  // Handle second step of multi-step login when page reloaded and only password field exists
+  function handlePasswordOnlyStep(passField, creds) {
+    console.log('[DSG] Password-only step - filling password and submitting');
+    
+    // Apply password save prevention
+    const dummyUserField = document.createElement('input');
+    dummyUserField.type = 'text';
+    dummyUserField.style.display = 'none';
+    preventPasswordSave(dummyUserField, passField);
+    
+    // Fill the password
+    fillInput(passField, creds.password);
+    
+    setTimeout(() => {
+      // Check for CAPTCHA
+      if (detectCaptcha()) {
+        updateOverlayMessage('CAPTCHA detected', 'Please complete verification and click Login');
+        setTimeout(() => {
+          hideLoadingOverlay();
+          chrome.runtime.sendMessage({ action: 'LOGIN_NEEDS_MANUAL', reason: 'captcha' });
+        }, 1000);
+        return;
+      }
+      
+      // Find and click login button
+      const btn = findLoginButton();
+      if (btn) {
+        console.log('[DSG] Clicking login button');
+        btn.click();
+        btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+        
+        // Send Enter key as backup
+        passField.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true }));
+        passField.dispatchEvent(new KeyboardEvent('keypress', { key: 'Enter', keyCode: 13, bubbles: true }));
+        passField.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', keyCode: 13, bubbles: true }));
+      } else {
+        // Try form submit
+        const form = passField.closest('form');
+        if (form) {
+          console.log('[DSG] No button found, submitting form');
+          form.method = 'POST';
+          form.submit();
+        }
+      }
+      
+      // Wait for login to complete
+      waitForLoginComplete(currentCreds);
+      chrome.runtime.sendMessage({ action: 'LOGIN_SUCCESS' });
+      
+    }, 300);
+  }
+
   // Handle multi-step login (Zoho, Microsoft, Google) where password appears after email validation
   function handleMultiStepLogin(userField, creds) {
     console.log('[DSG] Multi-step login detected - username field found, waiting for password field');

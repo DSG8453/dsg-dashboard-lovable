@@ -1,4 +1,4 @@
-// DSG Transport Secure Login - Background Service Worker v1.3.19
+// DSG Transport Secure Login - Background Service Worker v1.3.20
 // Opens tab VISIBLE with overlay covering login form
 // User sees loading screen, never the login form
 
@@ -49,7 +49,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       if (pending && isUrlMatch(pending.url, sender.tab?.url)) {
         console.log('[DSG-BG] Returning credentials to content script');
         sendResponse(pending);
-        chrome.storage.local.remove('pendingLogin');
+        // DON'T remove immediately - keep for multi-step logins (page reloads)
+        // Will be removed by LOGIN_SUCCESS, LOGIN_FAILED, or timeout
       } else {
         console.log('[DSG-BG] No matching pending login - returning null');
         sendResponse(null);
@@ -65,6 +66,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
   
   if (request.action === 'LOGIN_SUCCESS' || request.action === 'LOGIN_FAILED') {
+    console.log('[DSG-BG] Login completed:', request.action);
+    // NOW we can safely remove the credentials
+    chrome.storage.local.remove('pendingLogin');
     sendResponse({ acknowledged: true });
     return true;
   }
