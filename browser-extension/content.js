@@ -1,4 +1,4 @@
-// DSG Transport Secure Login - Content Script v1.3.22
+// DSG Transport Secure Login - Content Script v1.3.23
 // Shows OVERLAY to hide login form, fills credentials, auto-submits
 // DETECTS CAPTCHA/2FA: If found, reveals page for user to complete manually
 // User NEVER sees credentials - only masked dots (••••••••)
@@ -17,28 +17,34 @@
   }
   
   function init() {
+    // DEBUG: Log that content script is running
+    console.log('[DSG] Content script initialized on:', window.location.href);
+    
     // Check if this is a 2FA page (no username/password fields, has code input)
     if (detect2FAPage()) {
+      console.log('[DSG] 2FA page detected - skipping auto-login');
       hideLoadingOverlay();
       return;
     }
     
+    console.log('[DSG] Checking for pending login...');
     chrome.runtime.sendMessage({ action: 'GET_PENDING_LOGIN' }, (pending) => {
+      console.log('[DSG] Pending login response:', pending ? 'YES' : 'NONE');
       if (chrome.runtime.lastError) {
-        console.log('[DSG] Error getting pending login');
+        console.log('[DSG] Error:', chrome.runtime.lastError.message);
         return;
       }
       if (!pending) {
-        console.log('[DSG] No pending login for this page');
+        console.log('[DSG] No pending login - page opened normally');
         return;
       }
       if (loginAttempted) {
-        console.log('[DSG] Login already attempted');
+        console.log('[DSG] Login already attempted - skipping');
         return;
       }
       
       loginAttempted = true;
-      console.log('[DSG] Starting login for:', pending.toolName);
+      console.log('[DSG] Starting auto-login for tool:', pending.toolName);
       
       // IMMEDIATELY show overlay - user never sees login form
       showLoadingOverlay(pending.toolName);
@@ -345,7 +351,13 @@
     // Store creds for retry functionality
     currentCreds = creds;
     
-    console.log('[DSG] fillAndSubmit - has username:', !!creds.username, '- has password:', !!creds.password);
+    // DEBUG: Log what credentials we received
+    console.log('[DSG] ====== FILL AND SUBMIT ======');
+    console.log('[DSG] Username:', creds.username ? 'YES' : 'EMPTY');
+    console.log('[DSG] Password:', creds.password ? 'YES (' + creds.password.length + ' chars)' : 'EMPTY/MISSING');
+    console.log('[DSG] Username field selector:', creds.usernameField);
+    console.log('[DSG] Password field selector:', creds.passwordField);
+    console.log('[DSG] ==============================');
     
     const tryFill = () => {
       attempts++;
@@ -353,21 +365,23 @@
       const userField = findUsernameField(creds.usernameField);
       const passField = findPasswordField(creds.passwordField);
       
-      console.log('[DSG] Attempt', attempts, '- user:', !!userField, '- pass:', !!passField);
+      console.log('[DSG] Attempt', attempts, '- Username field:', userField ? 'FOUND' : 'NOT FOUND', '- Password field:', passField ? 'FOUND' : 'NOT FOUND');
       
       if (userField && passField) {
         // BOTH FIELDS FOUND - Standard login flow
-        console.log('[DSG] Both fields found - completing login');
+        console.log('[DSG] Both fields found - standard login');
         completeLogin(userField, passField, creds);
         
       } else if (userField && !passField) {
         // USERNAME FOUND BUT NO PASSWORD - Multi-step login (Zoho, Microsoft, etc.)
-        console.log('[DSG] Multi-step login - username only');
+        // Fill username first, then wait for password field to appear
+        console.log('[DSG] Only username found - multi-step login step 1');
         handleMultiStepLogin(userField, creds);
         
       } else if (!userField && passField) {
         // ONLY PASSWORD FOUND - Second step of multi-step login (page reloaded)
-        console.log('[DSG] Password step - filling password');
+        // Username was filled on previous page load, now fill password
+        console.log('[DSG] Only password found - multi-step login step 2 (page reloaded)');
         handlePasswordOnlyStep(passField, creds);
         
       } else if (attempts < maxAttempts) {
@@ -375,7 +389,6 @@
         setTimeout(tryFill, 500);
       } else {
         // Don't hide overlay - show retry options
-        console.log('[DSG] FAILED - no fields found after', maxAttempts, 'attempts');
         showRetryOverlay('Login fields not found', creds);
         chrome.runtime.sendMessage({ action: 'LOGIN_FAILED' });
       }
@@ -386,6 +399,8 @@
   
   // Handle second step of multi-step login when page reloaded and only password field exists
   function handlePasswordOnlyStep(passField, creds) {
+    console.log('[DSG] Password-only step - filling password and submitting');
+    
     // Apply password save prevention
     const dummyUserField = document.createElement('input');
     dummyUserField.type = 'text';
@@ -409,6 +424,7 @@
       // Find and click login button
       const btn = findLoginButton();
       if (btn) {
+        console.log('[DSG] Clicking login button');
         btn.click();
         btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
         
@@ -420,6 +436,7 @@
         // Try form submit
         const form = passField.closest('form');
         if (form) {
+          console.log('[DSG] No button found, submitting form');
           form.method = 'POST';
           form.submit();
         }
@@ -434,6 +451,9 @@
 
   // Handle multi-step login (Zoho, Microsoft, Google) where password appears after email validation
   function handleMultiStepLogin(userField, creds) {
+    console.log('[DSG] Multi-step login detected - username field found, waiting for password field');
+    console.log('[DSG] Filling username:', creds.username ? '***' + creds.username.slice(-10) : 'EMPTY');
+    
     // Fill username first
     fillInput(userField, creds.username);
     
@@ -445,8 +465,11 @@
     // Check if there's a "Next" button to click
     const nextBtn = findNextButton();
     if (nextBtn) {
+      console.log('[DSG] Found "Next" button, clicking it');
       nextBtn.click();
       nextBtn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+    } else {
+      console.log('[DSG] No "Next" button found, waiting for password field to appear');
     }
     
     // Now wait for password field to appear
@@ -488,12 +511,19 @@
     let passwordAttempts = 0;
     const maxPasswordAttempts = 20; // 10 seconds max
     
+    console.log('[DSG] Waiting for password field to appear...');
+    console.log('[DSG] Password to fill:', creds.password ? 'YES (' + creds.password.length + ' chars)' : 'EMPTY/MISSING');
+    
     const checkForPassword = () => {
       passwordAttempts++;
+      
       const passField = findPasswordField(creds.passwordField);
+      
+      console.log('[DSG] Password field check #' + passwordAttempts + ':', passField ? 'FOUND' : 'NOT FOUND');
       
       if (passField && isVisible(passField)) {
         // PASSWORD FIELD APPEARED! Complete the login
+        console.log('[DSG] Password field found and visible! Completing login...');
         completeLogin(userField, passField, creds);
         
       } else if (passwordAttempts < maxPasswordAttempts) {
@@ -503,6 +533,7 @@
       } else {
         // Timeout - password field never appeared
         // DON'T show login page - show retry options instead
+        console.log('[DSG] TIMEOUT: Password field never appeared after 10 seconds');
         showRetryOverlay('Password field not found', creds);
       }
     };
