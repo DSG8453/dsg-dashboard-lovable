@@ -9,13 +9,11 @@
   let loadingOverlay = null;
   let loginAttempted = false;
   let currentCreds = null; // Store creds for retry functionality
-
-  // Start as early as possible so overlay appears before login form is visible.
-  init();
+  
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => {
-      if (!loginAttempted) init();
-    }, { once: true });
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
   }
   
   function init() {
@@ -200,33 +198,31 @@
       </div>
     `;
     
-    if (!document.getElementById('dsg-loading-styles')) {
-      const style = document.createElement('style');
-      style.id = 'dsg-loading-styles';
-      style.textContent = `
-        #dsg-loading-overlay * { box-sizing: border-box; }
-        .dsg-loading-content { text-align: center; color: white; font-family: system-ui, -apple-system, sans-serif; }
-        .dsg-loading-spinner {
-          width: 50px; height: 50px;
-          border: 4px solid rgba(255,255,255,0.2);
-          border-top-color: #3b82f6;
-          border-radius: 50%;
-          animation: dsg-spin 1s linear infinite;
-          margin: 0 auto 20px;
-        }
-        .dsg-loading-logo {
-          font-size: 28px; font-weight: 700; margin-bottom: 16px;
-          background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-          -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-        }
-        .dsg-loading-text { font-size: 18px; font-weight: 500; margin-bottom: 8px; color: #fff; }
-        .dsg-loading-subtext { font-size: 14px; color: #94a3b8; }
-        @keyframes dsg-spin { to { transform: rotate(360deg); } }
-      `;
-      (document.head || document.documentElement).appendChild(style);
-    }
-
-    (document.body || document.documentElement).appendChild(loadingOverlay);
+    const style = document.createElement('style');
+    style.id = 'dsg-loading-styles';
+    style.textContent = `
+      #dsg-loading-overlay * { box-sizing: border-box; }
+      .dsg-loading-content { text-align: center; color: white; font-family: system-ui, -apple-system, sans-serif; }
+      .dsg-loading-spinner {
+        width: 50px; height: 50px;
+        border: 4px solid rgba(255,255,255,0.2);
+        border-top-color: #3b82f6;
+        border-radius: 50%;
+        animation: dsg-spin 1s linear infinite;
+        margin: 0 auto 20px;
+      }
+      .dsg-loading-logo {
+        font-size: 28px; font-weight: 700; margin-bottom: 16px;
+        background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      }
+      .dsg-loading-text { font-size: 18px; font-weight: 500; margin-bottom: 8px; color: #fff; }
+      .dsg-loading-subtext { font-size: 14px; color: #94a3b8; }
+      @keyframes dsg-spin { to { transform: rotate(360deg); } }
+    `;
+    
+    document.head.appendChild(style);
+    document.body.appendChild(loadingOverlay);
   }
   
   function updateOverlayMessage(message, submessage) {
@@ -332,7 +328,7 @@
   
   function fillAndSubmit(creds) {
     let attempts = 0;
-    const maxAttempts = 20;
+    const maxAttempts = 40;
     
     // Store creds for retry functionality
     currentCreds = creds;
@@ -432,8 +428,8 @@
       nextBtn.click();
       nextBtn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
     }
-
-    // Enter key fallback for sites that advance on Enter instead of button click.
+    
+    // Enter fallback for pages that progress on Enter.
     userField.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true }));
     userField.dispatchEvent(new KeyboardEvent('keypress', { key: 'Enter', keyCode: 13, bubbles: true }));
     userField.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', keyCode: 13, bubbles: true }));
@@ -448,12 +444,13 @@
       '#nextbtn',
       'button#nextbtn',
       'input#nextbtn',
+      'button[id="next"]',
+      'input[id="next"]',
       'button[id*="next" i]',
       'input[type="button"][value*="Next" i]',
       'input[type="submit"][value*="Next" i]',
       'button[data-action*="next" i]',
       'button[aria-label*="next" i]',
-      'button[class*="next" i]',
       'input[type="button"][value*="Continue" i]',
       'input[type="submit"][value*="Continue" i]',
       '#nextbtn', '.nextbtn', '.next-btn',
@@ -482,7 +479,7 @@
   // Wait for password field to appear after username validation
   function waitForPasswordField(userField, creds, nextBtn) {
     let passwordAttempts = 0;
-    const maxPasswordAttempts = 60; // 30 seconds max for slower Zoho flows
+    const maxPasswordAttempts = 70; // 35 seconds max for slower Zoho/account variants
     
     const checkForPassword = () => {
       passwordAttempts++;
@@ -493,7 +490,7 @@
         completeLogin(userField, passField, creds);
         
       } else if (passwordAttempts < maxPasswordAttempts) {
-        // Re-trigger continue action periodically in case the first click was ignored.
+        // Re-trigger next action periodically in case site ignored first click.
         if (passwordAttempts % 6 === 0) {
           if (nextBtn && isVisible(nextBtn)) {
             nextBtn.click();
@@ -801,6 +798,7 @@
       `input[name="${preferredName}"]`,
       `input[id="${preferredName}"]`,
       `input[name="${preferredName?.replace(/\$/g, '_')}"]`,
+      // Zoho lowercase variants
       'input[name="login_id"]',
       'input[id="login_id"]',
       'input[name*="login_id" i]',
@@ -874,8 +872,6 @@
       'input[autocomplete="current-password"]',
       'input[name="PASSWORD"]',
       'input[id="PASSWORD"]',
-      'input[name="password"]',
-      'input[id="password"]',
       'input[placeholder*="password" i]'
     ];
     
