@@ -1,12 +1,14 @@
-// DSG Transport Secure Login - Content Script
+// DSG Transport Secure Login - Content Script v1.3.26
 // Shows OVERLAY to hide login form, fills credentials, auto-submits
-// User NEVER sees login form - only sees DSG loading screen
+// DETECTS CAPTCHA/2FA: If found, reveals page for user to complete manually
+// User NEVER sees credentials - only masked dots (••••••••)
 
 (function() {
   'use strict';
   
   let loadingOverlay = null;
   let loginAttempted = false;
+  let currentCreds = null; // Store creds for retry functionality
   
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
@@ -15,8 +17,15 @@
   }
   
   function init() {
+    // Check if this is a 2FA page (no username/password fields, has code input)
+    if (detect2FAPage()) {
+      hideLoadingOverlay();
+      return;
+    }
+    
     chrome.runtime.sendMessage({ action: 'GET_PENDING_LOGIN' }, (pending) => {
       if (chrome.runtime.lastError || !pending || loginAttempted) return;
+      
       loginAttempted = true;
       
       // IMMEDIATELY show overlay - user never sees login form
@@ -27,13 +36,201 @@
     });
   }
   
-  // LOADING OVERLAY - Covers entire screen so user never sees login form
+  // ============ CAPTCHA DETECTION ============
+  
+  function detectCaptcha() {
+    const captchaSelectors = [
+      // Google reCAPTCHA
+      'iframe[src*="recaptcha"]',
+      'iframe[src*="google.com/recaptcha"]',
+      '.g-recaptcha',
+      '#g-recaptcha',
+      '[data-sitekey]',
+      // hCaptcha
+      'iframe[src*="hcaptcha"]',
+      '.h-captcha',
+      // Generic CAPTCHA
+      '[class*="captcha" i]',
+      '[id*="captcha" i]',
+      'img[src*="captcha" i]',
+      'input[name*="captcha" i]',
+      // Cloudflare
+      'iframe[src*="challenges.cloudflare"]',
+      '#cf-turnstile',
+      // FunCaptcha
+      'iframe[src*="funcaptcha"]',
+      // Text-based detection
+      '[aria-label*="captcha" i]',
+      '[title*="captcha" i]'
+    ];
+    
+    for (const selector of captchaSelectors) {
+      try {
+        const el = document.querySelector(selector);
+        if (el && isVisible(el)) {
+          return true;
+        }
+      } catch (e) {}
+    }
+    
+    // Check for CAPTCHA text on page
+    const bodyText = document.body?.innerText?.toLowerCase() || '';
+    if (bodyText.includes('complete the captcha') || 
+        bodyText.includes('prove you are human') ||
+        bodyText.includes('security check') ||
+        bodyText.includes('verify you are not a robot')) {
+      return true;
+    }
+    
+    return false;
+  }
+  
+  // ============ 2FA DETECTION ============
+  
+  function detect2FAPage() {
+    // Check if this looks like a 2FA/verification page (NO password field, HAS code input)
+    const hasPasswordField = document.querySelector('input[type="password"]');
+    if (hasPasswordField) return false; // Not a 2FA page if password field exists
+    
+    const twoFASelectors = [
+      // Code input fields
+      'input[name*="code" i]',
+      'input[name*="otp" i]',
+      'input[name*="2fa" i]',
+      'input[name*="totp" i]',
+      'input[name*="token" i]',
+      'input[name*="verification" i]',
+      'input[name*="mfa" i]',
+      'input[id*="code" i]',
+      'input[id*="otp" i]',
+      'input[id*="2fa" i]',
+      'input[placeholder*="code" i]',
+      'input[placeholder*="verification" i]',
+      'input[autocomplete="one-time-code"]',
+      // Multiple single-digit inputs (common 2FA pattern)
+      'input[maxlength="1"]',
+      'input[maxlength="6"]'
+    ];
+    
+    for (const selector of twoFASelectors) {
+      try {
+        const el = document.querySelector(selector);
+        if (el && isVisible(el)) {
+          return true;
+        }
+      } catch (e) {}
+    }
+    
+    // Check for 2FA text on page
+    const bodyText = document.body?.innerText?.toLowerCase() || '';
+    const twoFAPhrases = [
+      'verification code',
+      'enter the code',
+      'two-factor',
+      'two factor',
+      '2-factor',
+      '2fa',
+      'authenticator',
+      'sent to your phone',
+      'sent to your email',
+      'one-time password',
+      'one time password',
+      'security code',
+      'enter code',
+      'verify your identity'
+    ];
+    
+    for (const phrase of twoFAPhrases) {
+      if (bodyText.includes(phrase)) {
+        return true;
+      }
+    }
+    
+    return false;
+  }
+  
+  function detect2FAOnCurrentPage() {
+    // Lighter check for 2FA elements on login page (before submit)
+    const twoFASelectors = [
+      'input[name*="otp" i]',
+      'input[name*="2fa" i]',
+      'input[name*="totp" i]',
+      'input[autocomplete="one-time-code"]'
+    ];
+    
+    for (const selector of twoFASelectors) {
+      try {
+        const el = document.querySelector(selector);
+        if (el && isVisible(el)) return true;
+      } catch (e) {}
+    }
+    return false;
+  }
+
+  function looksLikeLoginPage() {
+    const url = window.location.href.toLowerCase();
+    const bodyText = document.body?.innerText?.toLowerCase() || '';
+
+    const urlLooksLogin = (
+      url.includes('login') ||
+      url.includes('signin') ||
+      url.includes('sign-in') ||
+      url.includes('accounts.zoho.com') ||
+      url.includes('auth')
+    );
+
+    const textLooksLogin = (
+      bodyText.includes('sign in') ||
+      bodyText.includes('log in') ||
+      bodyText.includes('login') ||
+      bodyText.includes('enter password') ||
+      bodyText.includes('forgot password')
+    );
+
+    return urlLooksLogin || textLooksLogin;
+  }
+
+  function isLikelyAlreadyLoggedIn() {
+    // If any password input exists, we are still on a login flow.
+    if (document.querySelector('input[type="password"]')) return false;
+
+    // Strong indicators that user is already authenticated.
+    const authIndicators = [
+      'a[href*="logout" i]',
+      'button[id*="logout" i]',
+      'a[href*="signout" i]',
+      'button[id*="signout" i]',
+      '[aria-label*="profile" i]',
+      '[class*="profile" i]',
+      '[class*="avatar" i]'
+    ];
+    for (const sel of authIndicators) {
+      try {
+        const el = document.querySelector(sel);
+        if (el && isVisible(el)) return true;
+      } catch (e) {}
+    }
+
+    // If it doesn't look like a login page anymore, treat as already logged in.
+    return !looksLikeLoginPage();
+  }
+
+  function isProbablyVisible(el) {
+    if (!el) return false;
+    const style = getComputedStyle(el);
+    if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return false;
+    if (el.offsetParent !== null) return true;
+    const rect = el.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
+  }
+  
+  // ============ LOADING OVERLAY ============
+  
   function showLoadingOverlay(toolName) {
     if (loadingOverlay) return;
     
-    // 1. Autocomplete off
-    userField.setAttribute('autocomplete', 'off');
-    passField.setAttribute('autocomplete', 'new-password');
+    loadingOverlay = document.createElement('div');
+    loadingOverlay.id = 'dsg-loading-overlay';
     
     loadingOverlay.style.cssText = `
       position: fixed !important;
@@ -47,6 +244,15 @@
       justify-content: center !important;
       z-index: 2147483647 !important;
       opacity: 1 !important;
+    `;
+    
+    loadingOverlay.innerHTML = `
+      <div class="dsg-loading-content">
+        <div class="dsg-loading-spinner"></div>
+        <div class="dsg-loading-logo">DSG Transport</div>
+        <div class="dsg-loading-text">Securely connecting to ${toolName || 'tool'}...</div>
+        <div class="dsg-loading-subtext">Please wait while we log you in</div>
+      </div>
     `;
     
     const style = document.createElement('style');
@@ -76,6 +282,15 @@
     document.body.appendChild(loadingOverlay);
   }
   
+  function updateOverlayMessage(message, submessage) {
+    if (loadingOverlay) {
+      const textEl = loadingOverlay.querySelector('.dsg-loading-text');
+      const subEl = loadingOverlay.querySelector('.dsg-loading-subtext');
+      if (textEl) textEl.textContent = message;
+      if (subEl) subEl.textContent = submessage;
+    }
+  }
+  
   function hideLoadingOverlay() {
     if (loadingOverlay) {
       loadingOverlay.style.opacity = '0';
@@ -88,9 +303,92 @@
     }
   }
   
+  // Show retry overlay instead of exposing login page
+  function showRetryOverlay(errorMessage, creds) {
+    if (!loadingOverlay) return;
+    
+    // Use stored creds if not passed
+    const retryCreds = creds || currentCreds;
+    
+    loadingOverlay.innerHTML = `
+      <div class="dsg-loading-content">
+        <div class="dsg-error-icon">⚠️</div>
+        <div class="dsg-loading-logo">DSG Transport</div>
+        <div class="dsg-loading-text">${errorMessage}</div>
+        <div class="dsg-loading-subtext">Login could not be completed automatically</div>
+        <div class="dsg-retry-buttons">
+          <button class="dsg-btn dsg-btn-retry" id="dsg-retry-btn">🔄 Retry Login</button>
+          <button class="dsg-btn dsg-btn-back" id="dsg-back-btn">← Go Back to Dashboard</button>
+        </div>
+      </div>
+    `;
+    
+    // Add button styles
+    const style = document.getElementById('dsg-loading-styles');
+    if (style) {
+      style.textContent += `
+        .dsg-error-icon { font-size: 48px; margin-bottom: 16px; }
+        .dsg-retry-buttons { margin-top: 24px; display: flex; flex-direction: column; gap: 12px; }
+        .dsg-btn { 
+          padding: 14px 24px; 
+          border-radius: 8px; 
+          font-size: 14px; 
+          font-weight: 500; 
+          cursor: pointer; 
+          border: none;
+          transition: all 0.2s;
+        }
+        .dsg-btn-retry { 
+          background: linear-gradient(135deg, #3b82f6, #2563eb); 
+          color: white; 
+        }
+        .dsg-btn-retry:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(59,130,246,0.4); }
+        .dsg-btn-back { 
+          background: rgba(255,255,255,0.1); 
+          color: white; 
+        }
+        .dsg-btn-back:hover { background: rgba(255,255,255,0.2); }
+      `;
+    }
+    
+    // Retry button - try login again
+    document.getElementById('dsg-retry-btn')?.addEventListener('click', () => {
+      loginAttempted = false;
+      updateOverlayMessage('Retrying login...', 'Please wait');
+      // Remove buttons
+      const buttons = loadingOverlay.querySelector('.dsg-retry-buttons');
+      if (buttons) buttons.remove();
+      // Restore spinner
+      const content = loadingOverlay.querySelector('.dsg-loading-content');
+      if (content) {
+        const spinner = document.createElement('div');
+        spinner.className = 'dsg-loading-spinner';
+        content.insertBefore(spinner, content.firstChild);
+        const errorIcon = content.querySelector('.dsg-error-icon');
+        if (errorIcon) errorIcon.remove();
+      }
+      // Retry fill using stored creds
+      setTimeout(() => fillAndSubmit(retryCreds), 500);
+    });
+    
+    // Back button - close tab and go back to dashboard
+    document.getElementById('dsg-back-btn')?.addEventListener('click', () => {
+      window.close();
+      // If window.close doesn't work (not opened by script), redirect to dashboard
+      setTimeout(() => {
+        window.location.href = 'https://portal.dsgtransport.net';
+      }, 100);
+    });
+  }
+  
+  // ============ MAIN FILL AND SUBMIT LOGIC ============
+  
   function fillAndSubmit(creds) {
     let attempts = 0;
-    const maxAttempts = 15;
+    const maxAttempts = 40;
+    
+    // Store creds for retry functionality
+    currentCreds = creds;
     
     const tryFill = () => {
       attempts++;
@@ -99,42 +397,251 @@
       const passField = findPasswordField(creds.passwordField);
       
       if (userField && passField) {
-        // PREVENT PASSWORD SAVE - 7 techniques
-        preventPasswordSave(userField, passField);
+        // BOTH FIELDS FOUND - Standard login flow
+        completeLogin(userField, passField, creds);
         
-        // Fill username
-        fillInput(userField, creds.username);
+      } else if (userField && !passField) {
+        // USERNAME FOUND BUT NO PASSWORD - Multi-step login (Zoho, Microsoft, etc.)
+        handleMultiStepLogin(userField, creds);
         
-        setTimeout(() => {
-          // Fill password
-          fillInput(passField, creds.password);
-          
-          setTimeout(() => {
-            // Find and click login button
-            const btn = findLoginButton();
-            if (btn) {
-              submitWithPasswordPrevention(userField, passField, btn);
-            } else {
-              // Try form.submit() as fallback
-              const form = userField.closest('form') || passField.closest('form');
-              if (form) {
-                scrambleFieldsBeforeSubmit(userField, passField);
-                form.submit();
-              }
-              setTimeout(hideLoadingOverlay, 1000);
-            }
-          }, 300);
-        }, 200);
+      } else if (!userField && passField) {
+        // ONLY PASSWORD FOUND - Second step of multi-step login (page reloaded)
+        handlePasswordOnlyStep(passField, creds);
         
       } else if (attempts < maxAttempts) {
+        // Keep trying to find fields
         setTimeout(tryFill, 500);
       } else {
-        hideLoadingOverlay();
-        chrome.runtime.sendMessage({ action: 'LOGIN_FAILED' });
+        // If login form is gone and user appears authenticated, don't show failure.
+        if (isLikelyAlreadyLoggedIn()) {
+          hideLoadingOverlay();
+          chrome.runtime.sendMessage({ action: 'LOGIN_SUCCESS' });
+        } else {
+          // Don't hide overlay - show retry options
+          showRetryOverlay('Login fields not found', creds);
+          chrome.runtime.sendMessage({ action: 'LOGIN_FAILED' });
+        }
       }
     };
     
     tryFill();
+  }
+  
+  // Handle second step of multi-step login when page reloaded and only password field exists
+  function handlePasswordOnlyStep(passField, creds) {
+    // Apply password save prevention
+    const dummyUserField = document.createElement('input');
+    dummyUserField.type = 'text';
+    dummyUserField.style.display = 'none';
+    preventPasswordSave(dummyUserField, passField);
+    
+    // Fill the password
+    fillInput(passField, creds.password);
+    
+    setTimeout(() => {
+      // Check for CAPTCHA
+      if (detectCaptcha()) {
+        updateOverlayMessage('CAPTCHA detected', 'Please complete verification and click Login');
+        setTimeout(() => {
+          hideLoadingOverlay();
+          chrome.runtime.sendMessage({ action: 'LOGIN_NEEDS_MANUAL', reason: 'captcha' });
+        }, 1000);
+        return;
+      }
+      
+      // Find and click login button
+      const btn = findLoginButton();
+      if (btn) {
+        btn.click();
+        btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+        
+        // Send Enter key as backup
+        passField.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true }));
+        passField.dispatchEvent(new KeyboardEvent('keypress', { key: 'Enter', keyCode: 13, bubbles: true }));
+        passField.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', keyCode: 13, bubbles: true }));
+      } else {
+        // Try form submit
+        const form = passField.closest('form');
+        if (form) {
+          form.method = 'POST';
+          form.submit();
+        }
+      }
+      
+      // Wait for login to complete
+      waitForLoginComplete(currentCreds);
+      chrome.runtime.sendMessage({ action: 'LOGIN_SUCCESS' });
+      
+    }, 300);
+  }
+
+  // Handle multi-step login (Zoho, Microsoft, Google) where password appears after email validation
+  function handleMultiStepLogin(userField, creds) {
+    // Fill username first
+    fillInput(userField, creds.username);
+    
+    // Trigger validation events so site knows user finished typing
+    userField.dispatchEvent(new Event('blur', { bubbles: true }));
+    userField.dispatchEvent(new Event('focusout', { bubbles: true }));
+    userField.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', keyCode: 9, bubbles: true }));
+    
+    // Check if there's a "Next" button to click
+    const nextBtn = findNextButton();
+    if (nextBtn) {
+      nextBtn.click();
+      nextBtn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+    }
+    
+    // Enter fallback for pages that progress on Enter.
+    userField.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true }));
+    userField.dispatchEvent(new KeyboardEvent('keypress', { key: 'Enter', keyCode: 13, bubbles: true }));
+    userField.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', keyCode: 13, bubbles: true }));
+    
+    // Now wait for password field to appear
+    waitForPasswordField(userField, creds, nextBtn);
+  }
+  
+  // Find "Next" button for multi-step login
+  function findNextButton() {
+    const selectors = [
+      '#nextbtn',
+      'button#nextbtn',
+      'input#nextbtn',
+      'button[id="next"]',
+      'input[id="next"]',
+      'button[id*="next" i]',
+      'input[type="button"][value*="Next" i]',
+      'input[type="submit"][value*="Next" i]',
+      'button[data-action*="next" i]',
+      '[role="button"][id*="next" i]',
+      '[role="button"][class*="next" i]',
+      'button[aria-label*="next" i]',
+      'input[type="button"][value*="Continue" i]',
+      'input[type="submit"][value*="Continue" i]',
+      '#nextbtn', '.nextbtn', '.next-btn',
+      'button[class*="next" i]'
+    ];
+    
+    for (const sel of selectors) {
+      try {
+        const el = document.querySelector(sel);
+        if (el && isProbablyVisible(el)) return el;
+      } catch (e) {}
+    }
+    
+    // Text search for "Next" button
+    const btns = document.querySelectorAll('button, input[type="button"], input[type="submit"], [role="button"], a');
+    for (const btn of btns) {
+      const text = (btn.textContent || btn.value || '').toLowerCase().trim();
+      if (text === 'next' || text === 'continue' || text === 'proceed') {
+        if (isProbablyVisible(btn)) return btn;
+      }
+    }
+    
+    return null;
+  }
+  
+  // Wait for password field to appear after username validation
+  function waitForPasswordField(userField, creds, nextBtn) {
+    let passwordAttempts = 0;
+    const maxPasswordAttempts = 90; // 45 seconds max for slower Zoho/account variants
+    
+    const checkForPassword = () => {
+      passwordAttempts++;
+      const passField = findPasswordField(creds.passwordField);
+      
+      if (passField && isVisible(passField)) {
+        // PASSWORD FIELD APPEARED! Complete the login
+        completeLogin(userField, passField, creds);
+        
+      } else if (passwordAttempts < maxPasswordAttempts) {
+        // Re-trigger next action periodically in case site ignored first click.
+        if (passwordAttempts % 6 === 0) {
+          if (nextBtn && isVisible(nextBtn)) {
+            nextBtn.click();
+            nextBtn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+          }
+          userField.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true }));
+          userField.dispatchEvent(new KeyboardEvent('keypress', { key: 'Enter', keyCode: 13, bubbles: true }));
+          userField.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', keyCode: 13, bubbles: true }));
+        }
+
+        // Keep waiting - password field not yet visible
+        setTimeout(checkForPassword, 500);
+        
+      } else {
+        // If page transitioned away from login and no password input exists, treat as success.
+        if (isLikelyAlreadyLoggedIn()) {
+          hideLoadingOverlay();
+          chrome.runtime.sendMessage({ action: 'LOGIN_SUCCESS' });
+          return;
+        }
+
+        // Timeout - password field never appeared
+        // DON'T show login page - show retry options instead
+        showRetryOverlay('Password field not found', creds);
+      }
+    };
+    
+    // Start checking after a short delay (give site time to validate)
+    setTimeout(checkForPassword, 800);
+  }
+  
+  // Complete login with both fields found
+  function completeLogin(userField, passField, creds) {
+    // PREVENT PASSWORD SAVE
+    preventPasswordSave(userField, passField);
+    
+    // Fill username (might already be filled in multi-step)
+    if (!userField.value || userField.value !== creds.username) {
+      fillInput(userField, creds.username);
+    }
+    
+    setTimeout(() => {
+      // Fill password
+      fillInput(passField, creds.password);
+      
+      setTimeout(() => {
+        // CHECK FOR CAPTCHA OR 2FA
+        const hasCaptcha = detectCaptcha();
+        const has2FA = detect2FAOnCurrentPage();
+        
+        if (hasCaptcha || has2FA) {
+          updateOverlayMessage(
+            hasCaptcha ? 'CAPTCHA detected' : '2FA detected',
+            'Please complete verification and click Login'
+          );
+          
+          setTimeout(() => {
+            hideLoadingOverlay();
+            chrome.runtime.sendMessage({ 
+              action: 'LOGIN_NEEDS_MANUAL',
+              reason: hasCaptcha ? 'captcha' : '2fa'
+            });
+          }, 1000);
+          
+        } else {
+          // NO CAPTCHA/2FA: Proceed with auto-submit
+          const btn = findLoginButton();
+          if (btn) {
+            submitWithPasswordPrevention(userField, passField, btn);
+          } else {
+            const form = userField.closest('form') || passField.closest('form');
+            if (form) {
+              form.method = 'POST';
+              form.querySelectorAll('input[name^="fake_"]').forEach(f => f.remove());
+              document.querySelectorAll('input[name^="fake_"]').forEach(f => f.parentElement?.remove());
+              form.submit();
+              // Wait for login to complete - don't just hide overlay
+              waitForLoginComplete(currentCreds);
+            } else {
+              // No form found - show retry
+              showRetryOverlay('Login form not found', currentCreds);
+            }
+          }
+        }
+      }, 300);
+    }, 200);
   }
   
   // ============ PASSWORD SAVE PREVENTION - 7 TECHNIQUES ============
@@ -150,6 +657,7 @@
       f.setAttribute('data-1p-ignore', 'true');     // 1Password
       f.setAttribute('data-bwignore', 'true');      // Bitwarden
       f.setAttribute('data-form-type', 'other');
+      f.setAttribute('data-private', 'true');
     });
     
     // 3. Form autocomplete
@@ -157,6 +665,7 @@
     if (form) {
       form.setAttribute('autocomplete', 'off');
       form.setAttribute('data-lpignore', 'true');
+      form.setAttribute('data-form-type', 'other');
     }
     
     // 4. Dummy fields BEFORE real fields (password managers grab first match)
@@ -185,37 +694,96 @@
     // 7. Blur fields
     userField.blur();
     passField.blur();
+    
+    // 8. Uncheck "Remember me" / "Keep me signed in" checkboxes
+    uncheckRememberMe(form);
+    
+    // 9. Prevent Chrome password save by marking as sensitive
+    userField.setAttribute('data-password-save', 'false');
+    passField.setAttribute('data-password-save', 'false');
   }
   
-  function scrambleFieldsBeforeSubmit(userField, passField) {
-    const rand = '_dsg_' + Date.now() + '_' + Math.random().toString(36).slice(2);
-    userField.name = 'f_x' + rand;
-    userField.id = 'i_x' + rand;
-    passField.name = 'f_y' + rand;
-    passField.id = 'i_y' + rand;
-    passField.setAttribute('autocomplete', 'new-password');
+  // Uncheck "Remember me" checkboxes to prevent password save prompts
+  function uncheckRememberMe(form) {
+    const rememberSelectors = [
+      'input[type="checkbox"][name*="remember" i]',
+      'input[type="checkbox"][id*="remember" i]',
+      'input[type="checkbox"][name*="keep" i]',
+      'input[type="checkbox"][id*="keep" i]',
+      'input[type="checkbox"][name*="stay" i]',
+      'input[type="checkbox"][id*="stay" i]',
+      'input[type="checkbox"][name*="persist" i]',
+      'input[type="checkbox"][class*="remember" i]'
+    ];
+    
+    const searchArea = form || document;
+    
+    for (const sel of rememberSelectors) {
+      try {
+        const checkboxes = searchArea.querySelectorAll(sel);
+        checkboxes.forEach(cb => {
+          if (cb.checked) {
+            cb.checked = false;
+            cb.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+        });
+      } catch (e) {}
+    }
   }
   
   function submitWithPasswordPrevention(userField, passField, btn) {
     const form = userField.closest('form') || passField.closest('form');
     
-    // Store originals
-    const origUserName = userField.name;
-    const origPassName = passField.name;
-    const origUserId = userField.id;
-    const origPassId = passField.id;
+    if (form) {
+      // CRITICAL: Force POST method to prevent credentials in URL
+      form.method = 'POST';
+      form.setAttribute('autocomplete', 'off');
+      
+      // Remove dummy fields before submit (they add empty params)
+      const dummyFields = form.querySelectorAll('input[name^="fake_"]');
+      dummyFields.forEach(f => f.remove());
+    }
     
-    // Scramble before submit
-    scrambleFieldsBeforeSubmit(userField, passField);
+    // Remove any dummy fields we added to body
+    document.querySelectorAll('input[name^="fake_"]').forEach(f => f.parentElement?.remove());
     
-    if (form) form.setAttribute('autocomplete', 'off');
+    // Focus on password field briefly (helps trigger form validation)
+    passField.focus();
     
-    // Click button
+    // Click button with multiple methods for compatibility
     requestAnimationFrame(() => {
+      // Method 1: Direct click
       btn.click();
       
-      // Backup: form.submit() if click didn't navigate
+      // Method 2: Dispatch click event (for React/Angular/Vue)
+      btn.dispatchEvent(new MouseEvent('click', {
+        bubbles: true,
+        cancelable: true,
+        view: window
+      }));
+      
+      // Method 3: If it's a link, trigger navigation
+      if (btn.tagName === 'A' && btn.href) {
+        setTimeout(() => {
+          if (document.contains(btn)) {
+            window.location.href = btn.href;
+          }
+        }, 300);
+      }
+      
+      // Method 4: Form submit as backup
       if (form) {
+        setTimeout(() => {
+          if (document.contains(btn)) {
+            try {
+              // Try Enter key on password field
+              passField.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true }));
+              passField.dispatchEvent(new KeyboardEvent('keypress', { key: 'Enter', keyCode: 13, bubbles: true }));
+              passField.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', keyCode: 13, bubbles: true }));
+            } catch (e) {}
+          }
+        }, 200);
+        
         setTimeout(() => {
           if (document.contains(btn)) {
             try {
@@ -223,35 +791,118 @@
               else form.submit();
             } catch (e) {}
           }
-        }, 400);
+        }, 500);
       }
       
-      // Hide overlay after redirect starts
-      setTimeout(hideLoadingOverlay, 1500);
-      
-      // Restore originals (in case of validation error)
-      setTimeout(() => {
-        if (document.contains(userField)) {
-          userField.name = origUserName;
-          userField.id = origUserId;
-        }
-        if (document.contains(passField)) {
-          passField.name = origPassName;
-          passField.id = origPassId;
-        }
-      }, 600);
+      // WAIT FOR LOGIN TO COMPLETE - Don't hide until navigated or logged in
+      waitForLoginComplete(currentCreds);
     });
     
     chrome.runtime.sendMessage({ action: 'LOGIN_SUCCESS' });
+  }
+  
+  // Wait for login to actually complete before hiding overlay
+  // Keeps overlay visible - NEVER shows login page to user
+  function waitForLoginComplete(creds) {
+    const startUrl = window.location.href;
+    const startTime = Date.now();
+    const maxWait = 30000; // Maximum 30 seconds
+    let checkCount = 0;
+    
+    const checkLogin = () => {
+      checkCount++;
+      const elapsed = Date.now() - startTime;
+      
+      // Check 1: URL changed (navigated to new page)
+      if (window.location.href !== startUrl) {
+        hideLoadingOverlay();
+        return;
+      }
+      
+      // Check 2: Login form is gone (password field removed)
+      const passField = document.querySelector('input[type="password"]');
+      if (!passField || !isVisible(passField)) {
+        // Password field gone - likely logged in
+        setTimeout(hideLoadingOverlay, 500);
+        return;
+      }
+      
+      // Check 3: Error message appeared (login failed)
+      const errorSelectors = [
+        '[class*="error" i]',
+        '[class*="invalid" i]',
+        '[class*="fail" i]',
+        '[id*="error" i]',
+        '.alert-danger',
+        '.alert-error'
+      ];
+      const loginForm = passField?.closest('form');
+      for (const sel of errorSelectors) {
+        try {
+          const err = document.querySelector(sel);
+          if (!err) continue;
+          if (!isStrictlyVisible(err)) continue;
+
+          const errText = (err.textContent || '').replace(/\s+/g, ' ').trim();
+          if (errText.length < 4) continue;
+          const lower = errText.toLowerCase();
+
+          // Avoid false positives from unrelated page blocks.
+          const hasErrorKeyword = [
+            'invalid', 'incorrect', 'failed', 'error', 'unable', 'expired', 'locked', 'required'
+          ].some(keyword => lower.includes(keyword));
+          if (!hasErrorKeyword) continue;
+
+          // If we can identify the login form, only trust errors in/near that form.
+          if (loginForm && !loginForm.contains(err) && !err.closest('form')) continue;
+
+          // RMIS sometimes renders expiry text early; only trust it after a grace period.
+          if ((lower.includes('password has expired') || lower.includes('password expired')) && elapsed < 15000) {
+            continue;
+          }
+
+          // Error detected - DON'T expose login page, show retry
+          showRetryOverlay('Login failed - ' + (errText.slice(0, 60) || 'Invalid credentials'), creds);
+          return;
+        } catch (e) {}
+      }
+      
+      // Check 4: Maximum time reached
+      if (elapsed >= maxWait) {
+        // Timeout - DON'T expose login page, show retry
+        showRetryOverlay('Login timed out', creds);
+        return;
+      }
+      
+      // Continue checking every 500ms
+      setTimeout(checkLogin, 500);
+    };
+    
+    // Start checking after initial submit delay
+    setTimeout(checkLogin, 1000);
   }
   
   // ============ FIELD FINDING ============
   
   function findUsernameField(preferredName) {
     const selectors = [
+      // Preferred name from tool config
       `input[name="${preferredName}"]`,
       `input[id="${preferredName}"]`,
       `input[name="${preferredName?.replace(/\$/g, '_')}"]`,
+      // Zoho lowercase variants
+      'input[name="login_id"]',
+      'input[id="login_id"]',
+      'input[name*="login_id" i]',
+      'input[id*="login_id" i]',
+      // Ascend TMS specific
+      'input[name="username"]',
+      'input[id="username"]',
+      'input[name="loginId"]',
+      'input[id="loginId"]',
+      'input[name="userId"]',
+      'input[id="userId"]',
+      // Common patterns
       `input[name*="txtUserName" i]`,
       `input[name*="UserName" i]`,
       `input[id*="txtUserName" i]`,
@@ -264,9 +915,15 @@
       'input[autocomplete="username"]',
       'input[placeholder*="email" i]',
       'input[placeholder*="user" i]',
+      'input[placeholder*="login" i]',
       'input[name="Email"]',
       'input[name="LOGIN_ID"]',
-      'form input[type="text"]:first-of-type'
+      // RMIS specific
+      'input[name="j_username"]',
+      'input[id="j_username"]',
+      // Generic fallbacks
+      'form input[type="text"]:first-of-type',
+      'input[type="text"]:not([hidden])'
     ];
     
     for (const sel of selectors) {
@@ -276,7 +933,8 @@
       } catch (e) {}
     }
     
-    // Fallback: any visible text input
+    // Fallback: any visible text input, but only on pages that look like login.
+    if (!looksLikeLoginPage()) return null;
     const inputs = document.querySelectorAll('input[type="text"], input:not([type])');
     for (const inp of inputs) {
       if (isVisible(inp)) return inp;
@@ -286,17 +944,28 @@
   
   function findPasswordField(preferredName) {
     const selectors = [
+      // Preferred name from tool config
       `input[name="${preferredName}"]`,
       `input[id="${preferredName}"]`,
       `input[name="${preferredName?.replace(/\$/g, '_')}"]`,
+      // Standard password field (most common)
+      'input[type="password"]',
+      // Ascend TMS specific
+      'input[name="password"]',
+      'input[id="password"]',
+      // RMIS specific
+      'input[name="j_password"]',
+      'input[id="j_password"]',
+      // Common patterns
       `input[name*="txtPassword" i]`,
       `input[id*="txtPassword" i]`,
-      'input[type="password"]',
       'input[name*="pass" i]',
       'input[name*="pwd" i]',
       'input[id*="pass" i]',
       'input[autocomplete="current-password"]',
-      'input[name="PASSWORD"]'
+      'input[name="PASSWORD"]',
+      'input[id="PASSWORD"]',
+      'input[placeholder*="password" i]'
     ];
     
     for (const sel of selectors) {
@@ -309,18 +978,46 @@
   }
   
   function findLoginButton() {
+    // PRIORITY 1: Submit button inside form with password field (most reliable)
+    const forms = document.querySelectorAll('form');
+    for (const form of forms) {
+      if (form.querySelector('input[type="password"]')) {
+        // Look for submit button first
+        const submitBtn = form.querySelector('button[type="submit"], input[type="submit"]');
+        if (submitBtn && isVisible(submitBtn) && !isSkipButton(submitBtn)) {
+          return submitBtn;
+        }
+        // Then any button that's not an SSO button
+        const btns = form.querySelectorAll('button, input[type="button"]');
+        for (const btn of btns) {
+          if (isVisible(btn) && !isSkipButton(btn)) {
+            const text = (btn.textContent || btn.value || '').toLowerCase();
+            // Make sure it looks like a login button
+            if (text.includes('login') || text.includes('sign in') || text.includes('submit') || text.includes('continue') || text === 'log in') {
+              return btn;
+            }
+          }
+        }
+      }
+    }
+    
+    // PRIORITY 2: Specific login button selectors
     const selectors = [
       'button[type="submit"]',
       'input[type="submit"]',
-      'button[id*="login" i]',
-      'button[id*="signin" i]',
-      'button[class*="login" i]',
-      'button[class*="signin" i]',
+      'button[id*="login" i]:not([id*="social"]):not([id*="apple"]):not([id*="google"])',
+      'button[id*="signin" i]:not([id*="social"]):not([id*="apple"]):not([id*="google"])',
+      'button[class*="login" i]:not([class*="social"]):not([class*="apple"]):not([class*="google"])',
+      'button[class*="signin" i]:not([class*="social"]):not([class*="apple"]):not([class*="google"])',
       'input[name*="btnLogin" i]',
       'input[id*="btnLogin" i]',
       'input[name*="btnSubmit" i]',
       '.btn-login', '.btn-signin',
-      'form button:not([type="button"])'
+      'button[data-action*="login" i]',
+      'button[ng-click*="login" i]',
+      'button[onclick*="login" i]',
+      'input[type="button"][value*="Login" i]',
+      'input[type="button"][value*="Sign In" i]'
     ];
     
     for (const sel of selectors) {
@@ -330,21 +1027,32 @@
       } catch (e) {}
     }
     
-    // Text search
-    const btns = document.querySelectorAll('button, input[type="submit"], input[type="button"]');
-    for (const btn of btns) {
-      const text = (btn.textContent || btn.value || '').toLowerCase();
-      if ((text.includes('sign in') || text.includes('log in') || text.includes('login') || text.includes('submit')) && isVisible(btn)) {
+    // PRIORITY 3: Exact text match (strict - avoid SSO buttons)
+    const clickables = document.querySelectorAll('button, input[type="submit"], input[type="button"]');
+    for (const btn of clickables) {
+      const text = (btn.textContent || btn.value || '').toLowerCase().trim();
+      // Only exact matches to avoid "Sign in with Apple" matching "Sign in"
+      if ((text === 'login' || text === 'log in' || text === 'sign in' || text === 'signin' || text === 'submit') && isVisible(btn) && !isSkipButton(btn)) {
         return btn;
       }
     }
     
-    // Any submit in form with password
-    const forms = document.querySelectorAll('form');
+    // PRIORITY 4: Primary/main button in login context
+    for (const btn of clickables) {
+      const text = (btn.textContent || btn.value || '').toLowerCase();
+      const btnClass = (btn.className || '').toLowerCase();
+      // Look for primary/main button styling
+      if ((btnClass.includes('primary') || btnClass.includes('main') || btnClass.includes('submit')) && 
+          isVisible(btn) && !isSkipButton(btn)) {
+        return btn;
+      }
+    }
+    
+    // PRIORITY 5: Form button fallback (last resort)
     for (const form of forms) {
       if (form.querySelector('input[type="password"]')) {
-        const btn = form.querySelector('button, input[type="submit"]');
-        if (btn && isVisible(btn)) return btn;
+        const btn = form.querySelector('button:not([type="button"]), input[type="submit"]');
+        if (btn && isVisible(btn) && !isSkipButton(btn)) return btn;
       }
     }
     
@@ -353,13 +1061,63 @@
   
   function isSkipButton(el) {
     const text = (el.textContent || el.value || '').toLowerCase();
-    return text.includes('forgot') || text.includes('register') || text.includes('sign up') || text.includes('create');
+    
+    // Skip these button types
+    if (text.includes('forgot') || text.includes('register') || text.includes('sign up') || text.includes('create')) {
+      return true;
+    }
+    
+    // Skip SSO/OAuth buttons (Google, Apple, Microsoft, Facebook, etc.)
+    const ssoKeywords = [
+      'apple', 'google', 'microsoft', 'facebook', 'twitter', 'linkedin',
+      'github', 'sso', 'oauth', 'saml', 'okta', 'azure', 'aws',
+      'sign in with', 'continue with', 'log in with'
+    ];
+    
+    for (const keyword of ssoKeywords) {
+      if (text.includes(keyword)) {
+        return true;
+      }
+    }
+    
+    // Skip buttons with SSO-related classes or IDs
+    const elClass = (el.className || '').toLowerCase();
+    const elId = (el.id || '').toLowerCase();
+    const ssoClassKeywords = ['apple', 'google', 'social', 'oauth', 'sso', 'microsoft', 'facebook'];
+    
+    for (const keyword of ssoClassKeywords) {
+      if (elClass.includes(keyword) || elId.includes(keyword)) {
+        return true;
+      }
+    }
+    
+    // Skip buttons with SSO images/icons
+    const img = el.querySelector('img');
+    if (img) {
+      const src = (img.src || '').toLowerCase();
+      if (src.includes('apple') || src.includes('google') || src.includes('microsoft') || src.includes('facebook')) {
+        return true;
+      }
+    }
+    
+    return false;
   }
   
   function isVisible(el) {
     if (!el) return false;
     const style = getComputedStyle(el);
-    return style.display !== 'none' && style.visibility !== 'hidden' && el.offsetParent !== null;
+    if (style.display === 'none' || style.visibility === 'hidden') return false;
+    const rect = el.getBoundingClientRect();
+    return (rect.width > 0 && rect.height > 0) || el.offsetParent !== null || style.position === 'fixed';
+  }
+
+  function isStrictlyVisible(el) {
+    if (!el) return false;
+    const style = getComputedStyle(el);
+    if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return false;
+    const rect = el.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return false;
+    return el.offsetParent !== null || style.position === 'fixed';
   }
   
   function fillInput(el, value) {
