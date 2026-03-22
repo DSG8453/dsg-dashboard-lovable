@@ -500,7 +500,8 @@ export const zohoAPI = {
       method: 'DELETE',
     }),
 
-  launch: () => fetchAPI('/api/zoho/launch'),
+  launch: (userEmail) =>
+    fetchAPI(`/api/zoho/launch/${encodeURIComponent(userEmail)}`),
 };
 
 export default {

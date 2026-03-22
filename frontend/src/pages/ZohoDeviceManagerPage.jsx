@@ -329,7 +329,7 @@ export const ZohoDeviceManagerPage = () => {
     setLaunchingEmail(assignment.user_email);
 
     try {
-      const response = await zohoAPI.launch();
+      const response = await zohoAPI.launch(assignment.user_email);
       const launchUrl = getLaunchUrl(response);
 
       if (launchUrl) {
