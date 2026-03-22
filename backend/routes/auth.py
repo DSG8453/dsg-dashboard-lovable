@@ -1,12 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, JSONResponse
 from models.schemas import LoginRequest, TokenResponse
 from utils.security import verify_password, create_access_token, decode_token, hash_password
 from utils.email_service import send_otp_email
 from database import get_db
 from bson import ObjectId
 from pydantic import BaseModel
+import hashlib
 import random
 import string
 import os
@@ -15,6 +16,7 @@ from datetime import datetime, timezone, timedelta
 from urllib.parse import urlencode
 
 router = APIRouter()
+zoho_router = APIRouter()
 security = HTTPBearer()
 
 # Google OAuth settings
@@ -29,6 +31,17 @@ except Exception as e:
     print(f"Warning: Could not load Google OAuth secrets: {e}")
     GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
     GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
+
+# Zoho OAuth settings
+try:
+    from services.secret_manager_service import SecretManagerService
+    zoho_secret_manager = SecretManagerService()
+    ZOHO_CLIENT_ID = zoho_secret_manager.get_secret("zoho-client-id") or os.getenv("ZOHO_CLIENT_ID")
+    ZOHO_CLIENT_SECRET = zoho_secret_manager.get_secret("zoho-client-secret") or os.getenv("ZOHO_CLIENT_SECRET")
+except Exception as e:
+    print(f"Warning: Could not load Zoho OAuth secrets: {e}")
+    ZOHO_CLIENT_ID = os.getenv("ZOHO_CLIENT_ID")
+    ZOHO_CLIENT_SECRET = os.getenv("ZOHO_CLIENT_SECRET")
 
 # Allowed email domains for login
 # Only users with emails from these domains can access the dashboard
@@ -51,6 +64,10 @@ def is_email_domain_allowed(email: str) -> bool:
 #   2. Frontend proxy setup (portal.dsgtransport.net/api)
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "https://portal.dsgtransport.net")
 GOOGLE_REDIRECT_URI = os.environ.get("GOOGLE_REDIRECT_URI", f"{FRONTEND_URL}/api/auth/google/callback")
+ZOHO_REDIRECT_URI = os.environ.get(
+    "ZOHO_REDIRECT_URI",
+    "https://dsg-backend-564085662748.us-central1.run.app/oauth/callback"
+)
 
 class OTPRequest(BaseModel):
     email: str
@@ -457,6 +474,97 @@ async def refresh_token(current_user: dict = Depends(get_current_user)):
         "expires_in": 1800,  # 30 minutes in seconds
         "user": current_user
     }
+
+
+# ============ ZOHO OAUTH ============
+
+_LOGGED_ZOHO_REFRESH_TOKEN_FINGERPRINTS = set()
+
+
+def _log_zoho_tokens_once(tokens: dict) -> bool:
+    """
+    Log the refresh/access tokens once per server instance so operators can
+    retrieve the one-time Zoho refresh token from Cloud Run logs.
+    """
+    refresh_token = tokens.get("refresh_token")
+    access_token = tokens.get("access_token")
+
+    if not refresh_token:
+        print("[Zoho OAuth] No refresh token returned from Zoho.")
+        print("[Zoho OAuth] Zoho may only return a refresh token on initial consent or after revoking prior grants.")
+        if access_token:
+            print(f"[Zoho OAuth] ACCESS TOKEN: {access_token}")
+        return False
+
+    fingerprint = hashlib.sha256(refresh_token.encode("utf-8")).hexdigest()
+    if fingerprint in _LOGGED_ZOHO_REFRESH_TOKEN_FINGERPRINTS:
+        print("[Zoho OAuth] Refresh token already logged in this server instance; skipping duplicate token log.")
+        return False
+
+    _LOGGED_ZOHO_REFRESH_TOKEN_FINGERPRINTS.add(fingerprint)
+    print(f"[Zoho OAuth] REFRESH TOKEN: {refresh_token}")
+    if access_token:
+        print(f"[Zoho OAuth] ACCESS TOKEN: {access_token}")
+    return True
+
+
+@zoho_router.get("/oauth/callback")
+@router.get("/zoho/callback")
+async def zoho_oauth_callback(code: str = None):
+    """
+    Exchange a Zoho authorization code for tokens and log the refresh token so
+    it can be copied from backend logs during one-time setup.
+    """
+    if not code:
+        return JSONResponse(status_code=400, content={"error": "No code provided"})
+
+    if not ZOHO_CLIENT_ID or not ZOHO_CLIENT_SECRET:
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Zoho OAuth client credentials are not configured"}
+        )
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.post(
+                "https://accounts.zoho.com/oauth/v2/token",
+                data={
+                    "code": code,
+                    "client_id": ZOHO_CLIENT_ID,
+                    "client_secret": ZOHO_CLIENT_SECRET,
+                    "redirect_uri": ZOHO_REDIRECT_URI,
+                    "grant_type": "authorization_code"
+                }
+            )
+
+        response_data = response.json()
+        if response.status_code != 200:
+            error_message = (
+                response_data.get("error")
+                or response_data.get("message")
+                or response.text
+                or "Zoho token exchange failed"
+            )
+            return JSONResponse(
+                status_code=500,
+                content={"error": f"Zoho token exchange failed: {error_message}"}
+            )
+
+        refresh_token_logged = _log_zoho_tokens_once(response_data)
+
+        if refresh_token_logged:
+            message = "Tokens generated! Check backend logs for refresh token."
+        elif response_data.get("refresh_token"):
+            message = "Tokens generated, but this refresh token was already logged in this server instance."
+        else:
+            message = "Tokens generated, but Zoho did not return a refresh token. Check backend logs for details."
+
+        return {
+            "success": True,
+            "message": message
+        }
+    except Exception as err:
+        return JSONResponse(status_code=500, content={"error": str(err)})
 
 
 # ============ DIRECT GOOGLE OAUTH ============
