@@ -4,6 +4,7 @@ from pathlib import Path
 import httpx
 import pytest
 from fastapi import FastAPI
+from httpx import ASGITransport, AsyncClient as HttpxAsyncClient
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -61,9 +62,9 @@ async def test_zoho_callback_logs_refresh_token_once(capsys, monkeypatch):
     monkeypatch.setattr(auth_routes.httpx, "AsyncClient", MockAsyncClient)
 
     app = build_test_app()
-    transport = httpx.ASGITransport(app=app)
+    transport = ASGITransport(app=app)
 
-    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+    async with HttpxAsyncClient(transport=transport, base_url="http://testserver") as client:
         first_response = await client.get("/oauth/callback", params={"code": "abc123"})
         second_response = await client.get("/oauth/callback", params={"code": "abc123"})
 
@@ -106,9 +107,9 @@ async def test_zoho_callback_logs_refresh_token_once(capsys, monkeypatch):
 @pytest.mark.asyncio
 async def test_zoho_callback_requires_code():
     app = build_test_app()
-    transport = httpx.ASGITransport(app=app)
+    transport = ASGITransport(app=app)
 
-    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+    async with HttpxAsyncClient(transport=transport, base_url="http://testserver") as client:
         response = await client.get("/oauth/callback")
 
     assert response.status_code == 400
@@ -133,9 +134,9 @@ async def test_zoho_callback_surfaces_exchange_errors(monkeypatch):
     monkeypatch.setattr(auth_routes.httpx, "AsyncClient", MockAsyncClient)
 
     app = build_test_app()
-    transport = httpx.ASGITransport(app=app)
+    transport = ASGITransport(app=app)
 
-    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+    async with HttpxAsyncClient(transport=transport, base_url="http://testserver") as client:
         response = await client.get("/oauth/callback", params={"code": "bad-code"})
 
     assert response.status_code == 500

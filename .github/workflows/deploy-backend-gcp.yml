@@ -43,7 +43,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ -d "backend/tests" ]; then
-            python -m pip install pytest
+            python -m pip install pytest pytest-asyncio
             python -m pytest backend/tests -q
           else
             echo "No backend tests directory found, skipping."
