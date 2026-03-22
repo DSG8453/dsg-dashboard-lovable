@@ -101,9 +101,33 @@ async function fetchAPI(endpoint, options = {}, retryCount = 0) {
     const errorData = await response.json().catch(() => ({}));
     throw new Error(errorData.detail || `API Error: ${response.status}`);
   }
-  
-  return response.json();
+
+  if (response.status === 204) {
+    return null;
+  }
+
+  const contentType = response.headers.get('content-type') || '';
+
+  if (contentType.includes('application/json')) {
+    return response.json();
+  }
+
+  const text = await response.text();
+  return text || null;
 }
+
+const buildQueryString = (params = {}) => {
+  const searchParams = new URLSearchParams();
+
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      searchParams.append(key, value);
+    }
+  });
+
+  const queryString = searchParams.toString();
+  return queryString ? `?${queryString}` : '';
+};
 
 // Auth API
 export const authAPI = {
@@ -455,6 +479,30 @@ export const ipManagementAPI = {
     }),
 };
 
+// Zoho Device Manager API
+export const zohoAPI = {
+  getDevices: () => fetchAPI('/api/zoho/devices'),
+
+  saveDevice: ({ user_email, computer_id, device_name }) =>
+    fetchAPI(
+      `/api/zoho/devices${buildQueryString({
+        user_email,
+        computer_id,
+        device_name,
+      })}`,
+      {
+        method: 'POST',
+      }
+    ),
+
+  deleteDevice: (userEmail) =>
+    fetchAPI(`/api/zoho/devices/${encodeURIComponent(userEmail)}`, {
+      method: 'DELETE',
+    }),
+
+  launch: () => fetchAPI('/api/zoho/launch'),
+};
+
 export default {
   auth: authAPI,
   users: usersAPI,
@@ -464,4 +512,6 @@ export default {
   settings: settingsAPI,
   devices: devicesAPI,
   activityLogs: activityLogsAPI,
+  ipManagement: ipManagementAPI,
+  zoho: zohoAPI,
 };

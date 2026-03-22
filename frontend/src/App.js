@@ -20,6 +20,7 @@ import { UsersPage } from "@/pages/UsersPage";
 import { CredentialsPage } from "@/pages/CredentialsPage";
 import { IPManagementPage } from "@/pages/IPManagementPage";
 import { DevicesPage } from "@/pages/DevicesPage";
+import { ZohoDeviceManagerPage } from "@/pages/ZohoDeviceManagerPage";
 import { ActivityLogsPage } from "@/pages/ActivityLogsPage";
 import { SupportManagementPage } from "@/pages/SupportManagementPage";
 import { IssuesPage } from "@/pages/IssuesPage";
@@ -143,6 +144,16 @@ function AppRoutes() {
           <ProtectedRoute>
             <AuthenticatedLayout>
               <DevicesPage />
+            </AuthenticatedLayout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/zoho-device-manager"
+        element={
+          <ProtectedRoute>
+            <AuthenticatedLayout>
+              <ZohoDeviceManagerPage />
             </AuthenticatedLayout>
           </ProtectedRoute>
         }

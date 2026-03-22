@@ -22,6 +22,7 @@ import {
   Users,
   Key,
   Globe,
+  Monitor,
   Smartphone,
   FileText,
   LogOut,
@@ -89,6 +90,7 @@ export const Navbar = ({ currentUser }) => {
         { id: "dashboard", name: t("nav.dashboard"), href: "/", icon: LayoutDashboard },
         { id: "profile", name: t("nav.profile"), href: "/profile", icon: User },
         { id: "users", name: t("nav.users"), href: "/users", icon: Users },
+        { id: "zohoDeviceManager", name: t("nav.zohoDeviceManager"), href: "/zoho-device-manager", icon: Monitor },
       ];
     }
 
@@ -100,6 +102,7 @@ export const Navbar = ({ currentUser }) => {
       { id: "credentials", name: t("nav.credentials"), href: "/credentials", icon: Key },
       { id: "ipManagement", name: t("nav.ipManagement"), href: "/ip-management", icon: Globe },
       { id: "devices", name: t("nav.devices"), href: "/devices", icon: Smartphone },
+      { id: "zohoDeviceManager", name: t("nav.zohoDeviceManager"), href: "/zoho-device-manager", icon: Monitor },
       { id: "activityLogs", name: t("nav.activityLogs"), href: "/activity-logs", icon: FileText },
     ];
   };

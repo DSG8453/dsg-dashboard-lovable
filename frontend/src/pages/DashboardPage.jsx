@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import { HeaderCard } from "@/components/dashboard/HeaderCard";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { ToolCard } from "@/components/dashboard/ToolCard";
@@ -286,9 +287,19 @@ export const DashboardPage = ({ currentUser }) => {
 
       {/* Tools Section */}
       <div className="mb-6">
-        <h2 className="text-xl font-bold text-foreground mb-6">
-          {isSuperAdmin ? "All Company Tools" : "My Assigned Tools"}
-        </h2>
+        <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 mb-6">
+          <h2 className="text-xl font-bold text-foreground">
+            {isSuperAdmin ? "All Company Tools" : "My Assigned Tools"}
+          </h2>
+          {(isAdmin || isSuperAdmin) && (
+            <Button asChild variant="outline" className="gap-2 self-start sm:self-auto">
+              <Link to="/zoho-device-manager">
+                <Monitor className="h-4 w-4" />
+                Zoho Device Manager
+              </Link>
+            </Button>
+          )}
+        </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 stagger-children">
           {tools.map((tool) => (
             <ToolCard 
