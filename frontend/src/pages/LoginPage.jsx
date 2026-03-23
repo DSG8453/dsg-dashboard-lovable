@@ -3,19 +3,23 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { useAuth } from "@/context/AuthContext";
 import { authAPI } from "@/services/api";
 import { toast } from "sonner";
-import { Loader2, ArrowLeft, Shield, Mail, Lock, CheckCircle } from "lucide-react";
+import { Loader2, ArrowLeft, Shield, Mail, Lock, CheckCircle, KeyRound } from "lucide-react";
 
 export const LoginPage = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [showPasswordLogin, setShowPasswordLogin] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [otp, setOtp] = useState("");
+  const [otpTempToken, setOtpTempToken] = useState("");
   const [emailChecked, setEmailChecked] = useState(false);
   const [passwordLoginAllowed, setPasswordLoginAllowed] = useState(false);
-  const { login, isAuthenticated, isLoading: authLoading } = useAuth();
+  const [otpRequired, setOtpRequired] = useState(false);
+  const { login, verifyOtp, resendOtp, isAuthenticated, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -60,7 +64,7 @@ export const LoginPage = () => {
           errorMessage = "Failed to get user information from Google. Please try again.";
           break;
         case 'domain_not_allowed':
-          errorMessage = `Access denied. Your email domain (${errorEmail || 'unknown'}) is not authorized to use this system. Only @dsgtransport.net, @dsgtransport.com, and @teamdsgtransport.com emails are allowed.`;
+          errorMessage = `Access denied for ${errorEmail || 'this email'}. Please sign in with an approved company account or contact an administrator to be added to the portal.`;
           break;
         default:
           errorMessage = `Authentication failed: ${error}`;
@@ -73,22 +77,13 @@ export const LoginPage = () => {
     }
   }, [location.search, navigate]);
 
-  // Check if we're inside an iframe (Emergent preview panel)
-  const isInIframe = () => {
-    try {
-      return window.self !== window.top;
-    } catch (e) {
-      return true;
-    }
-  };
-
   const handleGoogleLogin = async () => {
     setIsLoading(true);
     
     try {
-      // Direct Google OAuth - redirects to Google login page
-      // Uses relative path - Vercel proxies /api/* to the backend
-      const loginUrl = '/api/auth/google/login';
+      // Use the configured backend URL when available, otherwise same-origin proxy.
+      const backendUrl = (process.env.REACT_APP_BACKEND_URL || "").replace(/\/$/, "");
+      const loginUrl = `${backendUrl}/api/auth/google/login`;
       window.location.href = loginUrl;
     } catch (error) {
       console.error('[LoginPage] Google login error:', error);
@@ -153,10 +148,12 @@ export const LoginPage = () => {
       
       if (result.success) {
         if (result.requiresOtp) {
+          setOtpRequired(true);
+          setOtpTempToken(result.tempToken || "");
+          setOtp("");
           toast.info("2-Step Verification Required", {
             description: result.message,
           });
-          // Handle OTP flow if needed
         } else {
           toast.success("Welcome back!", {
             description: "Login successful",
@@ -177,10 +174,65 @@ export const LoginPage = () => {
     }
   };
 
+  const handleOtpSubmit = async (e) => {
+    e.preventDefault();
+
+    if (otp.length !== 6) {
+      toast.error("Please enter the 6-digit verification code");
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      const result = await verifyOtp(email, otp, otpTempToken);
+
+      if (result.success) {
+        toast.success("Welcome back!", {
+          description: "2-step verification complete",
+        });
+        navigate("/", { replace: true });
+      } else {
+        toast.error("Verification failed", {
+          description: result.error || "Invalid verification code",
+        });
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    if (!otpTempToken) {
+      toast.error("Your verification session has expired. Please sign in again.");
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      const result = await resendOtp(otpTempToken);
+      if (result.success) {
+        toast.success("Code sent", {
+          description: result.message,
+        });
+      } else {
+        toast.error("Unable to resend code", {
+          description: result.error || "Please try signing in again.",
+        });
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const resetEmailCheck = () => {
     setEmailChecked(false);
     setPasswordLoginAllowed(false);
     setPassword("");
+    setOtp("");
+    setOtpTempToken("");
+    setOtpRequired(false);
   };
 
   return (
@@ -279,6 +331,68 @@ export const LoginPage = () => {
                   <p className="text-xs text-gray-500 mt-2">
                     Password login is only available if enabled by your administrator.
                   </p>
+                </form>
+              ) : otpRequired ? (
+                <form onSubmit={handleOtpSubmit} className="space-y-4">
+                  <div className="text-left space-y-2">
+                    <div className="flex items-center gap-2 text-gray-700">
+                      <KeyRound className="h-4 w-4 text-blue-600" />
+                      <Label className="text-gray-600">Verification Code</Label>
+                    </div>
+                    <p className="text-sm text-gray-500">
+                      Enter the 6-digit code sent to <span className="font-medium">{email}</span>.
+                    </p>
+                  </div>
+
+                  <div className="flex justify-center">
+                    <InputOTP
+                      maxLength={6}
+                      value={otp}
+                      onChange={(value) => setOtp(value)}
+                      disabled={isLoading}
+                    >
+                      <InputOTPGroup>
+                        <InputOTPSlot index={0} />
+                        <InputOTPSlot index={1} />
+                        <InputOTPSlot index={2} />
+                        <InputOTPSlot index={3} />
+                        <InputOTPSlot index={4} />
+                        <InputOTPSlot index={5} />
+                      </InputOTPGroup>
+                    </InputOTP>
+                  </div>
+
+                  <Button
+                    type="submit"
+                    className="w-full h-11 bg-blue-600 hover:bg-blue-700 text-white"
+                    disabled={isLoading || otp.length !== 6}
+                  >
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        Verifying...
+                      </>
+                    ) : (
+                      "Verify & Sign In"
+                    )}
+                  </Button>
+
+                  <button
+                    type="button"
+                    onClick={handleResendOtp}
+                    disabled={isLoading}
+                    className="text-sm text-gray-500 hover:text-gray-700 transition-colors"
+                  >
+                    Resend verification code
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={resetEmailCheck}
+                    className="text-sm text-gray-500 hover:text-gray-700 transition-colors"
+                  >
+                    Start over
+                  </button>
                 </form>
               ) : passwordLoginAllowed ? (
                 // Step 2b: Password Login Allowed - Show Password Field

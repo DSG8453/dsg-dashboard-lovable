@@ -30,8 +30,8 @@ except Exception as e:
     GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
     GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
 
-# Allowed email domains for login
-# Only users with emails from these domains can access the dashboard
+# Allowed email domains for self-serve login.
+# Existing invited users can still log in with external domains.
 ALLOWED_DOMAINS = [
     "dsgtransport.net",
     "dsgtransport.com", 
@@ -44,6 +44,18 @@ def is_email_domain_allowed(email: str) -> bool:
         return False
     domain = email.lower().split("@")[-1]
     return domain in ALLOWED_DOMAINS
+
+
+def is_email_allowed_for_login(email: str, user: dict = None) -> bool:
+    """
+    Allow login for:
+    1. Company-domain emails, or
+    2. Any email that already has a provisioned user account.
+
+    This keeps unknown external emails blocked while allowing invited
+    external users created by an administrator to sign in.
+    """
+    return is_email_domain_allowed(email) or user is not None
 
 # Google OAuth redirect URI - uses GOOGLE_REDIRECT_URI env var if set, otherwise constructs from FRONTEND_URL
 # This allows flexibility between:
@@ -136,15 +148,16 @@ async def login(request: LoginRequest):
     email = request.email.lower().strip()
     SUPER_ADMIN_EMAIL = "info@dsgtransport.net"
     
-    # Check if email domain is allowed
-    if not is_email_domain_allowed(email):
+    # Find user by email
+    user = await db.users.find_one({"email": email})
+
+    # Unknown external emails are not allowed to log in
+    if not is_email_allowed_for_login(email, user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Access denied. Your email domain is not authorized to use this system."
         )
-    
-    # Find user by email
-    user = await db.users.find_one({"email": email})
+
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -613,13 +626,13 @@ async def google_callback(request: Request, code: str = None, error: str = None)
     if not google_email:
         return RedirectResponse(url=f"{frontend_url}/login?error=no_email")
     
-    # Check if email domain is allowed
-    if not is_email_domain_allowed(google_email):
-        print(f"[Google OAuth] Domain not allowed for email: {google_email}")
-        return RedirectResponse(url=f"{frontend_url}/login?error=domain_not_allowed&email={google_email}")
-    
     # Find existing user by email
     user = await db.users.find_one({"email": google_email})
+
+    # Unknown external emails are blocked, but invited external users are allowed
+    if not is_email_allowed_for_login(google_email, user):
+        print(f"[Google OAuth] Domain not allowed for email: {google_email}")
+        return RedirectResponse(url=f"{frontend_url}/login?error=domain_not_allowed&email={google_email}")
     
     if not user:
         return RedirectResponse(url=f"{frontend_url}/login?error=no_account&email={google_email}")
