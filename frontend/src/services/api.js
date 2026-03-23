@@ -129,6 +129,64 @@ const buildQueryString = (params = {}) => {
   return queryString ? `?${queryString}` : '';
 };
 
+const isZohoLaunchUrl = (url) =>
+  typeof url === 'string' && url.includes('/api/zoho/launch/');
+
+async function fetchUrlWithAuth(url, retryCount = 0) {
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeader(),
+    },
+  });
+
+  if (response.status === 401 && retryCount === 0) {
+    try {
+      await handleTokenRefresh();
+      return fetchUrlWithAuth(url, retryCount + 1);
+    } catch (refreshError) {
+      console.error('[API] Token refresh failed:', refreshError);
+      localStorage.removeItem('dsg_token');
+      localStorage.removeItem('dsg_user');
+      if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
+        window.location.href = '/login';
+      }
+      throw new Error('Session expired. Please log in again.');
+    }
+  }
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || `API Error: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+async function resolveZohoLaunchUrl(url) {
+  const data = await fetchUrlWithAuth(url);
+  const sessionUrl = data?.session_url;
+
+  if (!sessionUrl) {
+    throw new Error('Zoho session URL is missing from the launch response');
+  }
+
+  return sessionUrl;
+}
+
+async function resolveToolLaunchResponse(response) {
+  const directUrl = response?.direct_url;
+  if (!isZohoLaunchUrl(directUrl)) {
+    return response;
+  }
+
+  return {
+    ...response,
+    direct_url: await resolveZohoLaunchUrl(directUrl),
+  };
+}
+
 // Auth API
 export const authAPI = {
   login: (email, password) => 
@@ -304,8 +362,10 @@ export const toolsAPI = {
     fetchAPI(`/api/secure-access/${toolId}/extension-payload`, { method: 'POST' }),
   
   // Direct login - Server logs in and returns authenticated session (Bitwarden-style)
-  directLogin: (toolId) =>
-    fetchAPI(`/api/secure-access/${toolId}/direct-login`, { method: 'POST' }),
+  directLogin: async (toolId) => {
+    const response = await fetchAPI(`/api/secure-access/${toolId}/direct-login`, { method: 'POST' });
+    return resolveToolLaunchResponse(response);
+  },
 };
 
 // Credentials API
