@@ -10,7 +10,7 @@ import jwt
 load_dotenv()
 
 # Import routers
-from routes.auth import router as auth_router
+from routes.auth import router as auth_router, zoho_router
 from routes.users import router as users_router
 from routes.tools import router as tools_router
 from routes.credentials import router as credentials_router
@@ -72,6 +72,7 @@ app.add_middleware(
 
 # Include routers
 app.include_router(auth_router, prefix="/api/auth", tags=["Authentication"])
+app.include_router(zoho_router, tags=["Authentication"])
 app.include_router(users_router, prefix="/api/users", tags=["Users"])
 app.include_router(tools_router, prefix="/api/tools", tags=["Tools"])
 app.include_router(credentials_router, prefix="/api/credentials", tags=["Credentials"])
