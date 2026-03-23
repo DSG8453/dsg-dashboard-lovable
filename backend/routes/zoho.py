@@ -1,11 +1,34 @@
+import os
 from datetime import datetime, timezone
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from database import get_db
 from routes.auth import require_admin
+from services.secret_manager_service import SecretManagerService
 
 router = APIRouter()
+ZOHO_DEPARTMENT_ID = "2775667000000022001"
+
+
+def _get_zoho_access_token() -> str:
+    env_token = (
+        os.getenv("ZOHO_ASSIST_ACCESS_TOKEN", "").strip()
+        or os.getenv("ZOHO_ACCESS_TOKEN", "").strip()
+    )
+    if env_token:
+        return env_token
+
+    try:
+        secret_manager = SecretManagerService()
+        return (
+            secret_manager.get_secret("zoho-assist-access-token")
+            or secret_manager.get_secret("zoho-access-token")
+            or ""
+        ).strip()
+    except Exception:
+        return ""
 
 
 def _serialize_assignment(assignment: dict) -> dict:
@@ -90,4 +113,88 @@ async def add_device(
     return {
         "message": "Zoho device assignment saved successfully",
         "device": _serialize_assignment(assignment),
+    }
+
+
+@router.get("/launch/{user_email}", response_model=dict)
+async def launch_device(user_email: str, current_user: dict = Depends(require_admin)):
+    """Create a Zoho Assist session for the assigned device."""
+    db = await get_db()
+    normalized_email = user_email.strip().lower()
+
+    if not normalized_email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User email is required",
+        )
+
+    assignment = await db.zoho_devices.find_one({"user_email": normalized_email})
+    if not assignment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No Zoho device assignment found for {normalized_email}",
+        )
+
+    computer_id = str(assignment.get("computer_id", "")).strip()
+    if not computer_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Zoho device assignment for {normalized_email} is missing a computer ID",
+        )
+
+    access_token = _get_zoho_access_token()
+    if not access_token:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Zoho Assist access token is not configured",
+        )
+
+    launch_url = f"https://assist.zoho.com/api/v2/unattended/{computer_id}/connect"
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                launch_url,
+                params={"department_id": ZOHO_DEPARTMENT_ID},
+                headers={"Authorization": f"Zoho-oauthtoken {access_token}"},
+            )
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Failed to contact Zoho Assist: {exc}",
+        ) from exc
+
+    try:
+        payload = response.json()
+    except ValueError:
+        payload = {}
+
+    if response.status_code >= 400:
+        detail = (
+            payload.get("message")
+            or payload.get("error_description")
+            or payload.get("error")
+            or response.text
+            or "Zoho Assist session creation failed"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=detail,
+        )
+
+    session_url = (
+        payload.get("technician_uri")
+        or payload.get("session_url")
+        or payload.get("representation", {}).get("technician_uri")
+    )
+    if not session_url:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Zoho Assist response did not include technician_uri",
+        )
+
+    return {
+        "user_email": normalized_email,
+        "computer_id": computer_id,
+        "session_url": session_url,
     }
