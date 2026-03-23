@@ -1,5 +1,4 @@
 from datetime import datetime, timezone
-import re
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -44,24 +43,19 @@ def _build_zoho_tool_url(user_email: str) -> str:
 
 
 async def _sync_zoho_tool_for_user(db, user_email: str, device_name: str) -> str:
-    tool_url = _build_zoho_tool_url(user_email)
     tool_data = {
         "name": f"Zoho - {device_name}",
         "category": "Remote Access",
         "description": "Direct Zoho access",
-        "url": tool_url,
+        "url": _build_zoho_tool_url(user_email),
         "icon": "Globe",
-        "zoho_auto_created": True,
-        "zoho_user_email": user_email,
+        "zoho_auto": True,
+        "zoho_device_email": user_email,
     }
 
     existing_tool = await db.tools.find_one({
-        "zoho_auto_created": True,
-        "$or": [
-            {"zoho_user_email": user_email},
-            {"url": tool_url},
-            {"name": {"$regex": re.escape(user_email), "$options": "i"}},
-        ],
+        "zoho_auto": True,
+        "zoho_device_email": user_email,
     })
 
     if existing_tool:
@@ -173,31 +167,23 @@ async def delete_device(user_email: str, current_user: dict = Depends(require_ad
             detail="User email is required",
         )
 
-    tool_url = _build_zoho_tool_url(normalized_email)
-    tools_to_delete = await db.tools.find({
-        "zoho_auto_created": True,
-        "$or": [
-            {"name": {"$regex": re.escape(normalized_email), "$options": "i"}},
-            {"zoho_user_email": normalized_email},
-            {"url": tool_url},
-        ],
-    }).to_list(100)
-    tool_ids = [str(tool["_id"]) for tool in tools_to_delete]
-
-    if tools_to_delete:
-        await db.tools.delete_many({
-            "_id": {"$in": [tool["_id"] for tool in tools_to_delete]},
-        })
-
+    tool = await db.tools.find_one({
+        "zoho_auto": True,
+        "zoho_device_email": normalized_email,
+    })
+    tool_id = str(tool["_id"]) if tool else None
     user = await db.users.find_one({"email": normalized_email})
-    if user and tool_ids:
+    if user and tool_id:
         await db.users.update_one(
             {"_id": user["_id"]},
-            {"$pull": {"allowed_tools": {"$in": tool_ids}}},
+            {"$pull": {"allowed_tools": tool_id}},
         )
 
+    if tool:
+        await db.tools.delete_one({"_id": tool["_id"]})
+
     assignment_result = await db.zoho_devices.delete_one({"user_email": normalized_email})
-    if assignment_result.deleted_count == 0 and not tool_ids:
+    if assignment_result.deleted_count == 0 and not tool:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"No Zoho device assignment found for {normalized_email}",
