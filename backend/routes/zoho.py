@@ -4,7 +4,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from database import get_db
-from routes.auth import require_admin
+from routes.auth import get_current_user, require_admin
 
 router = APIRouter()
 ZOHO_DEPARTMENT_ID = "2775667000000022001"
@@ -30,6 +30,7 @@ async def get_zoho_token():
 def _serialize_assignment(assignment: dict) -> dict:
     return {
         "user_email": assignment.get("user_email", ""),
+        "user_name": assignment.get("user_name") or "",
         "computer_id": assignment.get("computer_id", ""),
         "device_name": assignment.get("device_name", ""),
         "created_at": assignment.get("created_at"),
@@ -42,20 +43,34 @@ def _build_zoho_tool_url(user_email: str) -> str:
     return f"{ZOHO_TOOL_BASE_URL}/{user_email}"
 
 
-async def _sync_zoho_tool_for_user(db, user_email: str, device_name: str) -> str:
+def _build_zoho_tool_name(device_name: str, user_name: str = "") -> str:
+    if user_name:
+        return f"Zoho - {user_name} - {device_name}"
+    return f"Zoho - {device_name}"
+
+
+async def _sync_zoho_tool_for_user(
+    db,
+    user_email: str,
+    computer_id: str,
+    device_name: str,
+    user_name: str = "",
+) -> str:
     tool_data = {
-        "name": f"Zoho - {device_name}",
+        "name": _build_zoho_tool_name(device_name, user_name),
         "category": "Remote Access",
         "description": "Direct Zoho access",
-        "url": _build_zoho_tool_url(user_email),
+        "url": f"{_build_zoho_tool_url(user_email)}?computer_id={computer_id}",
         "icon": "Globe",
         "zoho_auto": True,
         "zoho_device_email": user_email,
+        "zoho_computer_id": computer_id,
     }
 
     existing_tool = await db.tools.find_one({
         "zoho_auto": True,
         "zoho_device_email": user_email,
+        "zoho_computer_id": computer_id,
     })
 
     if existing_tool:
@@ -89,6 +104,7 @@ async def add_device(
     user_email: str = Query(...),
     computer_id: str = Query(...),
     device_name: str = Query(...),
+    user_name: str = Query(None),
     current_user: dict = Depends(require_admin),
 ):
     """Create or update a Zoho device assignment."""
@@ -97,6 +113,7 @@ async def add_device(
     normalized_email = user_email.strip().lower()
     normalized_computer_id = computer_id.strip()
     normalized_device_name = device_name.strip()
+    normalized_user_name = user_name.strip() if user_name and user_name.strip() else ""
 
     if not normalized_email or "@" not in normalized_email:
         raise HTTPException(
@@ -116,18 +133,28 @@ async def add_device(
             detail="Device name is required",
         )
 
+    existing_assignment = await db.zoho_devices.find_one({
+        "user_email": normalized_email,
+        "computer_id": normalized_computer_id,
+    })
+    if not normalized_user_name and existing_assignment:
+        normalized_user_name = existing_assignment.get("user_name") or ""
+
     now = datetime.now(timezone.utc).isoformat()
     assignment_data = {
         "user_email": normalized_email,
+        "user_name": normalized_user_name,
         "computer_id": normalized_computer_id,
         "device_name": normalized_device_name,
         "updated_at": now,
         "updated_by": current_user["email"],
     }
 
-    # Save the assignment directly without requiring a matching dashboard user.
     await db.zoho_devices.update_one(
-        {"user_email": normalized_email},
+        {
+            "user_email": normalized_email,
+            "computer_id": normalized_computer_id,
+        },
         {
             "$set": assignment_data,
             "$setOnInsert": {"created_at": now},
@@ -135,11 +162,16 @@ async def add_device(
         upsert=True,
     )
 
-    assignment = await db.zoho_devices.find_one({"user_email": normalized_email})
+    assignment = await db.zoho_devices.find_one({
+        "user_email": normalized_email,
+        "computer_id": normalized_computer_id,
+    })
     tool_id = await _sync_zoho_tool_for_user(
         db,
         normalized_email,
+        normalized_computer_id,
         normalized_device_name,
+        normalized_user_name,
     )
 
     user = await db.users.find_one({"email": normalized_email})
@@ -155,21 +187,32 @@ async def add_device(
     }
 
 
-@router.delete("/devices/{user_email}", response_model=dict)
-async def delete_device(user_email: str, current_user: dict = Depends(require_admin)):
+@router.delete("/devices/{user_email}/{computer_id}", response_model=dict)
+async def delete_device(
+    user_email: str,
+    computer_id: str,
+    current_user: dict = Depends(require_admin),
+):
     """Delete a Zoho device assignment and related auto-created tool access."""
     db = await get_db()
     normalized_email = user_email.strip().lower()
+    normalized_computer_id = computer_id.strip()
 
     if not normalized_email:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="User email is required",
         )
+    if not normalized_computer_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Computer ID is required",
+        )
 
     tool = await db.tools.find_one({
         "zoho_auto": True,
         "zoho_device_email": normalized_email,
+        "zoho_computer_id": normalized_computer_id,
     })
     tool_id = str(tool["_id"]) if tool else None
     user = await db.users.find_one({"email": normalized_email})
@@ -182,23 +225,31 @@ async def delete_device(user_email: str, current_user: dict = Depends(require_ad
     if tool:
         await db.tools.delete_one({"_id": tool["_id"]})
 
-    assignment_result = await db.zoho_devices.delete_one({"user_email": normalized_email})
+    assignment_result = await db.zoho_devices.delete_one({
+        "user_email": normalized_email,
+        "computer_id": normalized_computer_id,
+    })
     if assignment_result.deleted_count == 0 and not tool:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"No Zoho device assignment found for {normalized_email}",
+            detail=f"No Zoho device assignment found for {normalized_email} and {normalized_computer_id}",
         )
 
     return {
-        "message": f"Zoho device assignment deleted for {normalized_email}",
+        "message": f"Zoho device assignment deleted for {normalized_email} and {normalized_computer_id}",
     }
 
 
 @router.get("/launch/{user_email}", response_model=dict)
-async def launch_device(user_email: str, current_user: dict = Depends(require_admin)):
+async def launch_device(
+    user_email: str,
+    computer_id: str = Query(None),
+    current_user: dict = Depends(get_current_user),
+):
     """Create a Zoho Assist session for the assigned device."""
     db = await get_db()
     normalized_email = user_email.strip().lower()
+    normalized_computer_id = computer_id.strip() if computer_id else ""
 
     if not normalized_email:
         raise HTTPException(
@@ -206,7 +257,14 @@ async def launch_device(user_email: str, current_user: dict = Depends(require_ad
             detail="User email is required",
         )
 
-    assignment = await db.zoho_devices.find_one({"user_email": normalized_email})
+    assignment_filter = {"user_email": normalized_email}
+    if normalized_computer_id:
+        assignment_filter["computer_id"] = normalized_computer_id
+
+    assignment = await db.zoho_devices.find_one(
+        assignment_filter,
+        sort=[("updated_at", -1), ("created_at", -1)],
+    )
     if not assignment:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
