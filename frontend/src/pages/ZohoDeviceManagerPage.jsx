@@ -271,6 +271,41 @@ const getErrorMessage = (error, fallbackMessage) => {
   return fallbackMessage;
 };
 
+const extractEmailFromText = (text) => {
+  if (!text) {
+    return "";
+  }
+
+  const emailMatch = text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+  return emailMatch ? emailMatch[0].toLowerCase() : "";
+};
+
+const getDuplicateDeviceAssignmentMessage = (errorMessage, assignments, payload) => {
+  const normalizedError = (errorMessage || "").toLowerCase();
+  const looksLikeDuplicateDeviceError =
+    normalizedError.includes("already assigned") ||
+    normalizedError.includes("duplicate key") ||
+    normalizedError.includes("duplicate");
+
+  if (!looksLikeDuplicateDeviceError) {
+    return "";
+  }
+
+  const assignedEmail =
+    assignments.find(
+      (assignment) =>
+        assignment.computer_id.trim().toLowerCase() === payload.computer_id.toLowerCase() &&
+        assignment.user_email.toLowerCase() !== payload.user_email.toLowerCase()
+    )?.user_email ||
+    extractEmailFromText(errorMessage);
+
+  if (!assignedEmail) {
+    return "This device is already assigned to another user. Please use a different computer ID.";
+  }
+
+  return `This device is already assigned to ${assignedEmail}. Please use a different computer ID.`;
+};
+
 const getSessionUrl = (payload) => {
   if (!payload) {
     return null;
@@ -305,11 +340,13 @@ export const ZohoDeviceManagerPage = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [editingAssignmentKey, setEditingAssignmentKey] = useState(null);
   const [formState, setFormState] = useState(EMPTY_FORM);
+  const [saveErrorMessage, setSaveErrorMessage] = useState("");
   const isEditing = Boolean(editingAssignmentKey);
 
   const resetForm = () => {
     setFormState(EMPTY_FORM);
     setEditingAssignmentKey(null);
+    setSaveErrorMessage("");
   };
 
   const fetchAssignments = useCallback(
@@ -446,6 +483,7 @@ export const ZohoDeviceManagerPage = () => {
       computer_id: formState.computer_id.trim(),
       device_name: formState.device_name.trim(),
     };
+    setSaveErrorMessage("");
 
     if (!payload.user_email || !payload.computer_id || !payload.device_name) {
       toast.error("Please fill in all fields");
@@ -478,13 +516,24 @@ export const ZohoDeviceManagerPage = () => {
       );
       resetForm();
     } catch (error) {
+      const fallbackMessage = isEditing
+        ? "Failed to update Zoho assignment"
+        : "Failed to create Zoho assignment";
+      const errorMessage = getErrorMessage(error, fallbackMessage);
+      const duplicateDeviceMessage = getDuplicateDeviceAssignmentMessage(
+        errorMessage,
+        assignments,
+        payload
+      );
+
+      if (duplicateDeviceMessage) {
+        setSaveErrorMessage(duplicateDeviceMessage);
+        toast.error(duplicateDeviceMessage);
+        return;
+      }
+
       toast.error(
-        getErrorMessage(
-          error,
-          isEditing
-            ? "Failed to update Zoho assignment"
-            : "Failed to create Zoho assignment"
-        )
+        errorMessage
       );
     } finally {
       setIsSaving(false);
@@ -728,6 +777,10 @@ export const ZohoDeviceManagerPage = () => {
                 </Button>
               )}
             </div>
+
+            {saveErrorMessage && (
+              <p className="text-sm text-destructive">{saveErrorMessage}</p>
+            )}
           </CardContent>
         </Card>
 
