@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import re
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -8,6 +9,7 @@ from routes.auth import require_admin
 
 router = APIRouter()
 ZOHO_DEPARTMENT_ID = "2775667000000022001"
+ZOHO_TOOL_BASE_URL = "https://dsg-backend-564085662748.us-central1.run.app/api/zoho/launch"
 
 
 async def get_zoho_token():
@@ -35,6 +37,42 @@ def _serialize_assignment(assignment: dict) -> dict:
         "updated_at": assignment.get("updated_at"),
         "updated_by": assignment.get("updated_by"),
     }
+
+
+def _build_zoho_tool_url(user_email: str) -> str:
+    return f"{ZOHO_TOOL_BASE_URL}/{user_email}"
+
+
+async def _sync_zoho_tool_for_user(db, user_email: str, device_name: str) -> str:
+    tool_url = _build_zoho_tool_url(user_email)
+    tool_data = {
+        "name": f"Zoho - {device_name}",
+        "category": "Remote Access",
+        "description": "Direct Zoho access",
+        "url": tool_url,
+        "icon": "Globe",
+        "zoho_auto_created": True,
+        "zoho_user_email": user_email,
+    }
+
+    existing_tool = await db.tools.find_one({
+        "zoho_auto_created": True,
+        "$or": [
+            {"zoho_user_email": user_email},
+            {"url": tool_url},
+            {"name": {"$regex": re.escape(user_email), "$options": "i"}},
+        ],
+    })
+
+    if existing_tool:
+        await db.tools.update_one(
+            {"_id": existing_tool["_id"]},
+            {"$set": tool_data},
+        )
+        return str(existing_tool["_id"])
+
+    result = await db.tools.insert_one(tool_data)
+    return str(result.inserted_id)
 
 
 @router.get("/devices", response_model=dict)
@@ -104,10 +142,69 @@ async def add_device(
     )
 
     assignment = await db.zoho_devices.find_one({"user_email": normalized_email})
+    tool_id = await _sync_zoho_tool_for_user(
+        db,
+        normalized_email,
+        normalized_device_name,
+    )
+
+    user = await db.users.find_one({"email": normalized_email})
+    if user:
+        await db.users.update_one(
+            {"_id": user["_id"]},
+            {"$addToSet": {"allowed_tools": tool_id}},
+        )
 
     return {
         "message": "Zoho device assignment saved successfully",
         "device": _serialize_assignment(assignment),
+    }
+
+
+@router.delete("/devices/{user_email}", response_model=dict)
+async def delete_device(user_email: str, current_user: dict = Depends(require_admin)):
+    """Delete a Zoho device assignment and related auto-created tool access."""
+    db = await get_db()
+    normalized_email = user_email.strip().lower()
+
+    if not normalized_email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User email is required",
+        )
+
+    tool_url = _build_zoho_tool_url(normalized_email)
+    tools_to_delete = await db.tools.find({
+        "zoho_auto_created": True,
+        "$or": [
+            {"name": {"$regex": re.escape(normalized_email), "$options": "i"}},
+            {"zoho_user_email": normalized_email},
+            {"url": tool_url},
+        ],
+    }).to_list(100)
+    tool_ids = [str(tool["_id"]) for tool in tools_to_delete]
+
+    if tools_to_delete:
+        await db.tools.delete_many({
+            "_id": {"$in": [tool["_id"] for tool in tools_to_delete]},
+        })
+
+    user = await db.users.find_one({"email": normalized_email})
+    if user and tool_ids:
+        await db.users.update_one(
+            {"_id": user["_id"]},
+            {"$pull": {"allowed_tools": {"$in": tool_ids}}},
+        )
+
+    assignment_result = await db.zoho_devices.delete_one({"user_email": normalized_email})
+    if assignment_result.deleted_count == 0 and not tool_ids:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No Zoho device assignment found for {normalized_email}",
+        )
+
+    return {
+        "message": f"Zoho device assignment deleted for {normalized_email}",
     }
 
 
