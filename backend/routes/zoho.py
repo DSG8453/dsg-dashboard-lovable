@@ -1,4 +1,3 @@
-import os
 from datetime import datetime, timezone
 
 import httpx
@@ -6,29 +5,25 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from database import get_db
 from routes.auth import require_admin
-from services.secret_manager_service import SecretManagerService
 
 router = APIRouter()
 ZOHO_DEPARTMENT_ID = "2775667000000022001"
 
 
-def _get_zoho_access_token() -> str:
-    env_token = (
-        os.getenv("ZOHO_ASSIST_ACCESS_TOKEN", "").strip()
-        or os.getenv("ZOHO_ACCESS_TOKEN", "").strip()
-    )
-    if env_token:
-        return env_token
-
-    try:
-        secret_manager = SecretManagerService()
-        return (
-            secret_manager.get_secret("zoho-assist-access-token")
-            or secret_manager.get_secret("zoho-access-token")
-            or ""
-        ).strip()
-    except Exception:
-        return ""
+async def get_zoho_token():
+    import httpx
+    import os
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            "https://accounts.zoho.com/oauth/v2/token",
+            params={
+                "refresh_token": os.getenv("ZOHO_REFRESH_TOKEN"),
+                "client_id": os.getenv("ZOHO_CLIENT_ID"),
+                "client_secret": os.getenv("ZOHO_CLIENT_SECRET"),
+                "grant_type": "refresh_token"
+            }
+        )
+    return response.json().get("access_token")
 
 
 def _serialize_assignment(assignment: dict) -> dict:
@@ -142,7 +137,7 @@ async def launch_device(user_email: str, current_user: dict = Depends(require_ad
             detail=f"Zoho device assignment for {normalized_email} is missing a computer ID",
         )
 
-    access_token = _get_zoho_access_token()
+    access_token = await get_zoho_token()
     if not access_token:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
