@@ -41,6 +41,7 @@ import {
 } from "lucide-react";
 
 const EMPTY_FORM = {
+  user_name: "",
   user_email: "",
   computer_id: "",
   device_name: "",
@@ -49,7 +50,105 @@ const EMPTY_FORM = {
 const compareAssignments = (left, right) =>
   left.user_email.localeCompare(right.user_email, undefined, {
     sensitivity: "base",
+  }) ||
+  left.computer_id.localeCompare(right.computer_id, undefined, {
+    sensitivity: "base",
+  }) ||
+  left.device_name.localeCompare(right.device_name, undefined, {
+    sensitivity: "base",
   });
+
+const getAuthHeader = () => {
+  const token = localStorage.getItem("dsg_token");
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
+
+async function refreshZohoToken() {
+  const token = localStorage.getItem("dsg_token");
+  if (!token) {
+    throw new Error("No token to refresh");
+  }
+
+  const response = await fetch("/api/auth/refresh", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error("Token refresh failed");
+  }
+
+  const data = await response.json();
+  if (!data.access_token) {
+    throw new Error("No token in refresh response");
+  }
+
+  localStorage.setItem("dsg_token", data.access_token);
+  if (data.user) {
+    localStorage.setItem("dsg_user", JSON.stringify(data.user));
+  }
+}
+
+async function fetchZohoEndpoint(endpoint, options = {}, retryCount = 0) {
+  const response = await fetch(endpoint, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...getAuthHeader(),
+      ...options.headers,
+    },
+  });
+
+  if (response.status === 401 && retryCount === 0) {
+    try {
+      await refreshZohoToken();
+      return fetchZohoEndpoint(endpoint, options, retryCount + 1);
+    } catch (refreshError) {
+      localStorage.removeItem("dsg_token");
+      localStorage.removeItem("dsg_user");
+      if (typeof window !== "undefined" && !window.location.pathname.includes("/login")) {
+        window.location.href = "/login";
+      }
+      throw refreshError;
+    }
+  }
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || `API Error: ${response.status}`);
+  }
+
+  if (response.status === 204) {
+    return null;
+  }
+
+  const contentType = response.headers.get("content-type") || "";
+  if (contentType.includes("application/json")) {
+    return response.json();
+  }
+
+  const text = await response.text();
+  return text || null;
+}
+
+const buildZohoQueryString = (params = {}) => {
+  const searchParams = new URLSearchParams();
+
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") {
+      searchParams.append(key, value);
+    }
+  });
+
+  const query = searchParams.toString();
+  return query ? `?${query}` : "";
+};
+
+const getAssignmentKey = (assignment) =>
+  `${String(assignment.user_email || "").toLowerCase()}::${String(assignment.computer_id || "")}`;
 
 const normalizeAssignment = (assignment) => {
   if (!assignment || typeof assignment !== "object") {
@@ -60,6 +159,11 @@ const normalizeAssignment = (assignment) => {
     assignment.user_email ??
     assignment.userEmail ??
     assignment.email ??
+    "";
+  const userName =
+    assignment.user_name ??
+    assignment.userName ??
+    assignment.user?.name ??
     "";
   const deviceName =
     assignment.device_name ??
@@ -77,6 +181,7 @@ const normalizeAssignment = (assignment) => {
   }
 
   return {
+    user_name: String(userName || ""),
     user_email: String(userEmail),
     device_name: String(deviceName || ""),
     computer_id: String(computerId || ""),
@@ -100,6 +205,34 @@ const extractAssignments = (payload) => {
     .map(normalizeAssignment)
     .filter(Boolean)
     .sort(compareAssignments);
+};
+
+const groupAssignmentsByUser = (items) => {
+  const groups = new Map();
+
+  items.forEach((assignment) => {
+    const key = assignment.user_email.toLowerCase();
+    const existingGroup = groups.get(key);
+
+    if (existingGroup) {
+      if (!existingGroup.user_name && assignment.user_name) {
+        existingGroup.user_name = assignment.user_name;
+      }
+      existingGroup.devices.push(assignment);
+      return;
+    }
+
+    groups.set(key, {
+      user_email: assignment.user_email,
+      user_name: assignment.user_name,
+      devices: [assignment],
+    });
+  });
+
+  return Array.from(groups.values()).map((group) => ({
+    ...group,
+    devices: [...group.devices].sort(compareAssignments),
+  }));
 };
 
 const getErrorMessage = (error, fallbackMessage) => {
@@ -138,16 +271,17 @@ export const ZohoDeviceManagerPage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [launchingEmail, setLaunchingEmail] = useState(null);
+  const [launchingAssignmentKey, setLaunchingAssignmentKey] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [editingEmail, setEditingEmail] = useState(null);
+  const [editingAssignmentKey, setEditingAssignmentKey] = useState(null);
   const [formState, setFormState] = useState(EMPTY_FORM);
+  const isEditing = Boolean(editingAssignmentKey);
 
   const resetForm = () => {
     setFormState(EMPTY_FORM);
-    setEditingEmail(null);
+    setEditingAssignmentKey(null);
   };
 
   const fetchAssignments = useCallback(
@@ -196,12 +330,22 @@ export const ZohoDeviceManagerPage = () => {
     }
 
     return assignments.filter((assignment) =>
-      [assignment.user_email, assignment.device_name, assignment.computer_id]
+      [
+        assignment.user_name,
+        assignment.user_email,
+        assignment.device_name,
+        assignment.computer_id,
+      ]
         .join(" ")
         .toLowerCase()
         .includes(query)
     );
   }, [assignments, searchQuery]);
+
+  const groupedAssignments = useMemo(
+    () => groupAssignmentsByUser(filteredAssignments),
+    [filteredAssignments]
+  );
 
   const stats = useMemo(() => {
     const uniqueUsers = new Set(
@@ -239,8 +383,9 @@ export const ZohoDeviceManagerPage = () => {
   }, [assignments]);
 
   const handleEdit = (assignment) => {
-    setEditingEmail(assignment.user_email);
+    setEditingAssignmentKey(getAssignmentKey(assignment));
     setFormState({
+      user_name: assignment.user_name || "",
       user_email: assignment.user_email,
       computer_id: assignment.computer_id,
       device_name: assignment.device_name,
@@ -249,6 +394,7 @@ export const ZohoDeviceManagerPage = () => {
 
   const handleSubmit = async () => {
     const payload = {
+      user_name: formState.user_name.trim(),
       user_email: formState.user_email.trim().toLowerCase(),
       computer_id: formState.computer_id.trim(),
       device_name: formState.device_name.trim(),
@@ -266,10 +412,20 @@ export const ZohoDeviceManagerPage = () => {
 
     setIsSaving(true);
     try {
-      await zohoAPI.saveDevice(payload);
+      await fetchZohoEndpoint(
+        `/api/zoho/devices${buildZohoQueryString({
+          user_name: payload.user_name,
+          user_email: payload.user_email,
+          computer_id: payload.computer_id,
+          device_name: payload.device_name,
+        })}`,
+        {
+          method: "POST",
+        }
+      );
       await fetchAssignments({ showSpinner: false });
       toast.success(
-        editingEmail
+        isEditing
           ? `Zoho assignment updated for ${payload.user_email}`
           : `Zoho assignment created for ${payload.user_email}`
       );
@@ -278,7 +434,7 @@ export const ZohoDeviceManagerPage = () => {
       toast.error(
         getErrorMessage(
           error,
-          editingEmail
+          isEditing
             ? "Failed to update Zoho assignment"
             : "Failed to create Zoho assignment"
         )
@@ -294,13 +450,18 @@ export const ZohoDeviceManagerPage = () => {
     }
 
     try {
-      await zohoAPI.deleteDevice(deleteTarget.user_email);
+      await fetchZohoEndpoint(
+        `/api/zoho/devices/${encodeURIComponent(deleteTarget.user_email)}/${encodeURIComponent(deleteTarget.computer_id)}`,
+        {
+          method: "DELETE",
+        }
+      );
       setAssignments((currentAssignments) =>
         currentAssignments.filter(
-          (assignment) => assignment.user_email !== deleteTarget.user_email
+          (assignment) => getAssignmentKey(assignment) !== getAssignmentKey(deleteTarget)
         )
       );
-      if (editingEmail === deleteTarget.user_email) {
+      if (editingAssignmentKey === getAssignmentKey(deleteTarget)) {
         resetForm();
       }
       toast.success(`Zoho assignment removed for ${deleteTarget.user_email}`);
@@ -312,10 +473,15 @@ export const ZohoDeviceManagerPage = () => {
   };
 
   const handleLaunch = async (assignment) => {
-    setLaunchingEmail(assignment.user_email);
+    const assignmentKey = getAssignmentKey(assignment);
+    setLaunchingAssignmentKey(assignmentKey);
 
     try {
-      const response = await zohoAPI.launch(assignment.user_email);
+      const response = await fetchZohoEndpoint(
+        `/api/zoho/launch/${encodeURIComponent(assignment.user_email)}${buildZohoQueryString({
+          computer_id: assignment.computer_id,
+        })}`
+      );
       const sessionUrl = getSessionUrl(response);
 
       if (sessionUrl) {
@@ -328,7 +494,7 @@ export const ZohoDeviceManagerPage = () => {
     } catch (error) {
       toast.error(getErrorMessage(error, "Failed to launch Zoho"));
     } finally {
-      setLaunchingEmail(null);
+      setLaunchingAssignmentKey(null);
     }
   };
 
@@ -405,14 +571,29 @@ export const ZohoDeviceManagerPage = () => {
       <div className="grid grid-cols-1 xl:grid-cols-[360px_minmax(0,1fr)] gap-6">
         <Card className="border-2 border-border/50 shadow-card">
           <CardHeader>
-            <CardTitle>{editingEmail ? "Edit Assignment" : "Add New Assignment"}</CardTitle>
+            <CardTitle>{isEditing ? "Edit Assignment" : "Add New Assignment"}</CardTitle>
             <CardDescription>
-              {editingEmail
+              {isEditing
                 ? "Update the current device mapping for this user."
                 : "Create a Zoho device assignment for an admin-managed user."}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="zoho-user-name">User Name</Label>
+              <Input
+                id="zoho-user-name"
+                placeholder="Optional user name"
+                value={formState.user_name}
+                onChange={(event) =>
+                  setFormState((currentState) => ({
+                    ...currentState,
+                    user_name: event.target.value,
+                  }))
+                }
+              />
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="zoho-user-email">User Email</Label>
               <Input
@@ -420,7 +601,7 @@ export const ZohoDeviceManagerPage = () => {
                 type="email"
                 placeholder="user@dsgtransport.net"
                 value={formState.user_email}
-                disabled={Boolean(editingEmail)}
+                disabled={isEditing}
                 onChange={(event) =>
                   setFormState((currentState) => ({
                     ...currentState,
@@ -428,7 +609,7 @@ export const ZohoDeviceManagerPage = () => {
                   }))
                 }
               />
-              {editingEmail && (
+              {isEditing && (
                 <p className="text-xs text-muted-foreground">
                   Email is locked during edit because the backend uses it as the
                   assignment identifier.
@@ -481,12 +662,12 @@ export const ZohoDeviceManagerPage = () => {
                 ) : (
                   <>
                     <Save className="h-4 w-4" />
-                    {editingEmail ? "Save Changes" : "Save Assignment"}
+                    {isEditing ? "Save Changes" : "Save Assignment"}
                   </>
                 )}
               </Button>
 
-              {editingEmail && (
+              {isEditing && (
                 <Button
                   variant="outline"
                   className="flex-1"
@@ -544,6 +725,7 @@ export const ZohoDeviceManagerPage = () => {
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/50">
+                    <TableHead className="font-semibold">User Name</TableHead>
                     <TableHead className="font-semibold">User Email</TableHead>
                     <TableHead className="font-semibold">Device Name</TableHead>
                     <TableHead className="font-semibold">Computer ID</TableHead>
@@ -551,62 +733,84 @@ export const ZohoDeviceManagerPage = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredAssignments.map((assignment) => {
-                    const isLaunching = launchingEmail === assignment.user_email;
+                  {groupedAssignments.flatMap((group) =>
+                    group.devices.map((assignment, index) => {
+                      const isLaunching =
+                        launchingAssignmentKey === getAssignmentKey(assignment);
+                      const isFirstDeviceRow = index === 0;
 
-                    return (
-                      <TableRow key={assignment.user_email} className="hover:bg-muted/30">
-                        <TableCell className="font-medium">{assignment.user_email}</TableCell>
-                        <TableCell className="max-w-[220px] truncate" title={assignment.device_name || "Unnamed device"}>
-                          {assignment.device_name || "Unnamed device"}
-                        </TableCell>
-                        <TableCell className="font-mono text-sm">
-                          {assignment.computer_id || "Not set"}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex flex-wrap items-center justify-end gap-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="gap-2"
-                              onClick={() => handleEdit(assignment)}
+                      return (
+                        <TableRow key={getAssignmentKey(assignment)} className="hover:bg-muted/30">
+                          {isFirstDeviceRow && (
+                            <TableCell
+                              rowSpan={group.devices.length}
+                              className="align-top font-medium"
                             >
-                              <Edit className="h-4 w-4" />
-                              Edit
-                            </Button>
+                              {group.user_name || "—"}
+                            </TableCell>
+                          )}
+                          {isFirstDeviceRow && (
+                            <TableCell
+                              rowSpan={group.devices.length}
+                              className="align-top font-medium"
+                            >
+                              {group.user_email}
+                            </TableCell>
+                          )}
+                          <TableCell
+                            className="max-w-[220px] truncate"
+                            title={assignment.device_name || "Unnamed device"}
+                          >
+                            {assignment.device_name || "Unnamed device"}
+                          </TableCell>
+                          <TableCell className="font-mono text-sm">
+                            {assignment.computer_id || "Not set"}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-wrap items-center justify-end gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="gap-2"
+                                onClick={() => handleEdit(assignment)}
+                              >
+                                <Edit className="h-4 w-4" />
+                                Edit
+                              </Button>
 
-                            <Button
-                              variant="gradient"
-                              size="sm"
-                              className="gap-2"
-                              onClick={() => handleLaunch(assignment)}
-                              disabled={isLaunching}
-                            >
-                              {isLaunching ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              ) : (
-                                <ExternalLink className="h-4 w-4" />
-                              )}
-                              Launch Zoho
-                            </Button>
+                              <Button
+                                variant="gradient"
+                                size="sm"
+                                className="gap-2"
+                                onClick={() => handleLaunch(assignment)}
+                                disabled={isLaunching}
+                              >
+                                {isLaunching ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <ExternalLink className="h-4 w-4" />
+                                )}
+                                Launch Zoho
+                              </Button>
 
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="gap-2 text-destructive hover:text-destructive hover:bg-destructive/10"
-                              onClick={() => {
-                                setDeleteTarget(assignment);
-                                setDeleteDialogOpen(true);
-                              }}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                              Delete
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="gap-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                onClick={() => {
+                                  setDeleteTarget(assignment);
+                                  setDeleteDialogOpen(true);
+                                }}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                                Delete
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )}
                 </TableBody>
               </Table>
             )}
