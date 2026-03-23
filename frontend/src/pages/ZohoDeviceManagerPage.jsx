@@ -98,46 +98,19 @@ const getErrorMessage = (error, fallbackMessage) => {
   return fallbackMessage;
 };
 
-const getLaunchUrl = (payload) => {
+const getSessionUrl = (payload) => {
   if (!payload) {
     return null;
   }
 
-  if (typeof payload === "string") {
-    const trimmed = payload.trim();
-    if (
-      trimmed.startsWith("http://") ||
-      trimmed.startsWith("https://") ||
-      trimmed.startsWith("/")
-    ) {
-      return trimmed;
-    }
-
-    return null;
-  }
-
-  const candidateKeys = [
-    "launch_url",
-    "launchUrl",
-    "url",
-    "redirect_url",
-    "redirectUrl",
-    "login_url",
-    "loginUrl",
-    "access_url",
-    "accessUrl",
-    "direct_url",
-    "directUrl",
-  ];
-
-  for (const key of candidateKeys) {
-    const value = payload?.[key];
-    if (
-      typeof value === "string" &&
-      (value.startsWith("http://") || value.startsWith("https://") || value.startsWith("/"))
-    ) {
-      return value;
-    }
+  const sessionUrl = payload?.session_url;
+  if (
+    typeof sessionUrl === "string" &&
+    (sessionUrl.startsWith("http://") ||
+      sessionUrl.startsWith("https://") ||
+      sessionUrl.startsWith("/"))
+  ) {
+    return sessionUrl;
   }
 
   return null;
@@ -330,26 +303,15 @@ export const ZohoDeviceManagerPage = () => {
 
     try {
       const response = await zohoAPI.launch(assignment.user_email);
-      const launchUrl = getLaunchUrl(response);
+      const sessionUrl = getSessionUrl(response);
 
-      if (launchUrl) {
-        window.open(launchUrl, "_blank", "noopener,noreferrer");
+      if (sessionUrl) {
+        window.open(sessionUrl, "_blank");
         toast.success(`Launching Zoho for ${assignment.user_email}`);
         return;
       }
 
-      if (typeof response === "string" && response.trim()) {
-        toast.success(response);
-        return;
-      }
-
-      const message =
-        response?.message ||
-        response?.detail ||
-        response?.status ||
-        `Zoho launch requested for ${assignment.user_email}`;
-
-      toast.success(message);
+      toast.error("Zoho session URL is missing from the launch response");
     } catch (error) {
       toast.error(getErrorMessage(error, "Failed to launch Zoho"));
     } finally {
