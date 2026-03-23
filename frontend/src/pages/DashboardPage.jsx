@@ -264,6 +264,57 @@ export const DashboardPage = ({ currentUser }) => {
     }
   };
 
+  const isZohoLaunchTool = (tool) =>
+    typeof tool?.url === "string" && tool.url.includes("/api/zoho/launch/");
+
+  const isOpenToolButtonClick = (event) => {
+    const button = event.target?.closest?.("button");
+    if (!button) {
+      return false;
+    }
+
+    return button.textContent?.includes("Open Tool");
+  };
+
+  const handleZohoToolClickCapture = async (event, tool) => {
+    if (!isZohoLaunchTool(tool) || !isOpenToolButtonClick(event)) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const token = localStorage.getItem("dsg_token");
+    if (!token) {
+      toast.error("You must be logged in to launch this Zoho session.");
+      return;
+    }
+
+    try {
+      const response = await fetch(tool.url, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.detail || `API Error: ${response.status}`);
+      }
+
+      if (!data?.session_url) {
+        throw new Error("Zoho session URL is missing from the launch response");
+      }
+
+      window.open(data.session_url, "_blank", "noopener,noreferrer");
+    } catch (error) {
+      toast.error("Failed to launch Zoho tool", {
+        description: error.message || "Please try again",
+      });
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[50vh]">
@@ -302,12 +353,13 @@ export const DashboardPage = ({ currentUser }) => {
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 stagger-children">
           {tools.map((tool) => (
-            <ToolCard 
-              key={tool.id} 
-              tool={tool} 
-              onDelete={isSuperAdmin ? handleDeleteTool : null}
-              onUpdate={handleToolUpdate}
-            />
+            <div key={tool.id} onClickCapture={(event) => handleZohoToolClickCapture(event, tool)}>
+              <ToolCard
+                tool={tool}
+                onDelete={isSuperAdmin ? handleDeleteTool : null}
+                onUpdate={handleToolUpdate}
+              />
+            </div>
           ))}
           {tools.length === 0 && !isSuperAdmin && (
             <div className="col-span-full text-center py-12 text-muted-foreground">
