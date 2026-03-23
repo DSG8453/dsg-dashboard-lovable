@@ -235,6 +235,34 @@ const groupAssignmentsByUser = (items) => {
   }));
 };
 
+const buildExistingUserOptions = (items) => {
+  const options = new Map();
+
+  items.forEach((assignment) => {
+    const normalizedEmail = assignment.user_email.toLowerCase();
+    if (!options.has(normalizedEmail)) {
+      options.set(normalizedEmail, {
+        user_name: assignment.user_name || "",
+        user_email: assignment.user_email,
+      });
+      return;
+    }
+
+    const existingOption = options.get(normalizedEmail);
+    if (!existingOption.user_name && assignment.user_name) {
+      existingOption.user_name = assignment.user_name;
+    }
+  });
+
+  return Array.from(options.values()).sort((left, right) =>
+    (left.user_name || left.user_email).localeCompare(
+      right.user_name || right.user_email,
+      undefined,
+      { sensitivity: "base" }
+    )
+  );
+};
+
 const getErrorMessage = (error, fallbackMessage) => {
   if (error instanceof Error && error.message) {
     return error.message;
@@ -346,6 +374,10 @@ export const ZohoDeviceManagerPage = () => {
     () => groupAssignmentsByUser(filteredAssignments),
     [filteredAssignments]
   );
+  const existingUserOptions = useMemo(
+    () => buildExistingUserOptions(assignments),
+    [assignments]
+  );
 
   const stats = useMemo(() => {
     const uniqueUsers = new Set(
@@ -390,6 +422,21 @@ export const ZohoDeviceManagerPage = () => {
       computer_id: assignment.computer_id,
       device_name: assignment.device_name,
     });
+  };
+
+  const handleUserNameChange = (value) => {
+    const matchedUser = existingUserOptions.find(
+      (option) =>
+        option.user_name &&
+        option.user_name.toLowerCase() === value.trim().toLowerCase()
+    );
+
+    setFormState((currentState) => ({
+      ...currentState,
+      user_name: value,
+      user_email:
+        !isEditing && matchedUser ? matchedUser.user_email : currentState.user_email,
+    }));
   };
 
   const handleSubmit = async () => {
@@ -584,14 +631,17 @@ export const ZohoDeviceManagerPage = () => {
               <Input
                 id="zoho-user-name"
                 placeholder="Optional user name"
+                list="zoho-known-user-names"
                 value={formState.user_name}
-                onChange={(event) =>
-                  setFormState((currentState) => ({
-                    ...currentState,
-                    user_name: event.target.value,
-                  }))
-                }
+                onChange={(event) => handleUserNameChange(event.target.value)}
               />
+              <datalist id="zoho-known-user-names">
+                {existingUserOptions
+                  .filter((option) => option.user_name)
+                  .map((option) => (
+                    <option key={`${option.user_email}::${option.user_name}`} value={option.user_name} />
+                  ))}
+              </datalist>
             </div>
 
             <div className="space-y-2">

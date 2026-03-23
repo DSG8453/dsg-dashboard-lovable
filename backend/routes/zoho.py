@@ -27,6 +27,19 @@ async def get_zoho_token():
     return response.json().get("access_token")
 
 
+async def _ensure_zoho_device_indexes(db):
+    # Migrate away from the old unique user_email index so one user can own multiple devices.
+    try:
+        await db.zoho_devices.drop_index("user_email_1")
+    except Exception:
+        pass
+
+    await db.zoho_devices.create_index(
+        [("user_email", 1), ("computer_id", 1)],
+        unique=True,
+    )
+
+
 def _serialize_assignment(assignment: dict) -> dict:
     return {
         "user_email": assignment.get("user_email", ""),
@@ -113,6 +126,7 @@ async def add_device(
 ):
     """Create or update a Zoho device assignment."""
     db = await get_db()
+    await _ensure_zoho_device_indexes(db)
 
     normalized_email = user_email.strip().lower()
     normalized_computer_id = computer_id.strip()
