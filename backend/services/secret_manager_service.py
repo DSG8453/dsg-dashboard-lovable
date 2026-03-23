@@ -13,12 +13,15 @@ logger = logging.getLogger(__name__)
 
 class SecretManagerService:
     def __init__(self):
-        self.project_id = os.getenv('GCP_PROJECT_ID', 'dsg-transport-platform')
+        self.project_id = os.getenv('GCP_PROJECT_ID', '').strip()
         
         try:
             self.client = secretmanager.SecretManagerServiceClient()
             self.cache: Dict[str, str] = {}
-            logger.info(f"✅ Secret Manager initialized for project: {self.project_id}")
+            if not self.project_id:
+                logger.warning("⚠️ GCP_PROJECT_ID is not set. Secret lookups will fall back to environment variables only.")
+            else:
+                logger.info(f"✅ Secret Manager initialized for project: {self.project_id}")
         except Exception as e:
             logger.error(f"❌ Failed to initialize Secret Manager: {str(e)}")
             self.client = None
@@ -29,6 +32,12 @@ class SecretManagerService:
             raise HTTPException(
                 status_code=500,
                 detail="Secret Manager not initialized. Check GCP_PROJECT_ID environment variable."
+            )
+
+        if not self.project_id:
+            raise HTTPException(
+                status_code=500,
+                detail="GCP_PROJECT_ID is not configured for Secret Manager access."
             )
         
         cache_key = f"{secret_name}:{version}"

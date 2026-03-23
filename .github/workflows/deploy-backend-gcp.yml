@@ -65,6 +65,9 @@ jobs:
           VAR_GCP_REGION: ${{ vars.GCP_REGION }}
           VAR_GCP_ARTIFACT_REPO: ${{ vars.GCP_ARTIFACT_REPO }}
           VAR_GCP_BACKEND_SERVICE: ${{ vars.GCP_BACKEND_SERVICE }}
+          VAR_FRONTEND_URL: ${{ vars.FRONTEND_URL }}
+          VAR_GOOGLE_REDIRECT_URI: ${{ vars.GOOGLE_REDIRECT_URI }}
+          VAR_EXTENSION_KEY: ${{ vars.EXTENSION_KEY }}
         run: |
           set -euo pipefail
           if [ -z "${VAR_GCP_PROJECT_ID}" ]; then
@@ -76,12 +79,18 @@ jobs:
           GCP_ARTIFACT_REPO="${VAR_GCP_ARTIFACT_REPO:-backend-images}"
           GCP_BACKEND_SERVICE="${VAR_GCP_BACKEND_SERVICE:-dsg-backend}"
           IMAGE_TAG="${INPUT_IMAGE_TAG:-${GITHUB_SHA}}"
+          FRONTEND_URL="${VAR_FRONTEND_URL:-https://portal.dsgtransport.net}"
+          GOOGLE_REDIRECT_URI="${VAR_GOOGLE_REDIRECT_URI:-${FRONTEND_URL}/api/auth/google/callback}"
+          EXTENSION_KEY="${VAR_EXTENSION_KEY:-}"
 
           echo "GCP_PROJECT_ID=${VAR_GCP_PROJECT_ID}" >> "${GITHUB_ENV}"
           echo "GCP_REGION=${GCP_REGION}" >> "${GITHUB_ENV}"
           echo "GCP_ARTIFACT_REPO=${GCP_ARTIFACT_REPO}" >> "${GITHUB_ENV}"
           echo "GCP_BACKEND_SERVICE=${GCP_BACKEND_SERVICE}" >> "${GITHUB_ENV}"
           echo "IMAGE_TAG=${IMAGE_TAG}" >> "${GITHUB_ENV}"
+          echo "FRONTEND_URL=${FRONTEND_URL}" >> "${GITHUB_ENV}"
+          echo "GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT_URI}" >> "${GITHUB_ENV}"
+          echo "EXTENSION_KEY=${EXTENSION_KEY}" >> "${GITHUB_ENV}"
 
       - name: Authenticate to Google Cloud (OIDC)
         uses: google-github-actions/auth@v2
@@ -110,11 +119,19 @@ jobs:
           IMAGE_URI: ${{ steps.build-image.outputs.image_uri }}
         run: |
           set -euo pipefail
+          SECRET_BINDINGS="MONGO_URL=mongo-uri:latest,MONGO_PASSWORD=mongo-password:latest,JWT_SECRET=jwt-secret:latest,JWT_SECRET_KEY=jwt-secret:latest,ENCRYPTION_KEY=encryption-key:latest,GOOGLE_CLIENT_ID=google-client-id:latest,GOOGLE_CLIENT_SECRET=google-client-secret:latest,ZOHO_CLIENT_ID=ZOHO_CLIENT_ID:latest,ZOHO_CLIENT_SECRET=ZOHO_CLIENT_SECRET:latest,ZOHO_REFRESH_TOKEN=ZOHO_REFRESH_TOKEN:latest"
+          ENV_VARS="GCP_PROJECT_ID=${GCP_PROJECT_ID},DB_NAME=dsg-transport,FRONTEND_URL=${FRONTEND_URL},GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT_URI}"
+          if [ -n "${EXTENSION_KEY}" ]; then
+            ENV_VARS="${ENV_VARS},EXTENSION_KEY=${EXTENSION_KEY}"
+          fi
+
           gcloud run deploy "${GCP_BACKEND_SERVICE}" \
             --image "${IMAGE_URI}" \
             --platform managed \
             --region "${GCP_REGION}" \
             --project "${GCP_PROJECT_ID}" \
+            --update-env-vars "${ENV_VARS}" \
+            --update-secrets "${SECRET_BINDINGS}" \
             --allow-unauthenticated
           SERVICE_URL="$(gcloud run services describe "${GCP_BACKEND_SERVICE}" --region "${GCP_REGION}" --project "${GCP_PROJECT_ID}" --format='value(status.url)')"
           echo "service_url=${SERVICE_URL}" >> "${GITHUB_OUTPUT}"
@@ -135,3 +152,21 @@ jobs:
           done
           echo "Smoke test failed" >&2
           exit 1
+
+      - name: Verify Google OAuth redirect is configured
+        env:
+          FRONTEND_URL: ${{ env.FRONTEND_URL }}
+        run: |
+          set -euo pipefail
+          LOGIN_URL="${FRONTEND_URL}/api/auth/google/login"
+          echo "Checking Google OAuth redirect from ${LOGIN_URL}"
+          REDIRECT_LOCATION="$(curl -fsSI "${LOGIN_URL}" | awk 'BEGIN{IGNORECASE=1} /^location: / {sub(/\r$/, "", $2); print $2}')"
+          if [ -z "${REDIRECT_LOCATION}" ]; then
+            echo "Google OAuth login endpoint did not return a redirect" >&2
+            exit 1
+          fi
+          if [[ "${REDIRECT_LOCATION}" == *"client_id=None"* ]]; then
+            echo "Google OAuth redirect is misconfigured: ${REDIRECT_LOCATION}" >&2
+            exit 1
+          fi
+          echo "Google OAuth redirect looks configured."
