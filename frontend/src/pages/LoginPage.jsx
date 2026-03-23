@@ -42,6 +42,9 @@ export const LoginPage = () => {
       let errorMessage = "Authentication failed";
       
       switch (error) {
+        case 'google_oauth_not_configured':
+          errorMessage = "Google sign-in is not configured for this portal yet. Please contact your administrator or use password login if it has been enabled for your account.";
+          break;
         case 'no_account':
           errorMessage = `No account found for ${errorEmail || 'this email'}. Please contact your administrator to create an account.`;
           break;

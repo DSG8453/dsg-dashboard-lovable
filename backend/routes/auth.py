@@ -57,6 +57,11 @@ def is_email_allowed_for_login(email: str, user: dict = None) -> bool:
     """
     return is_email_domain_allowed(email) or user is not None
 
+
+def is_google_oauth_configured() -> bool:
+    """Return True when both Google OAuth secrets are available."""
+    return bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET)
+
 # Google OAuth redirect URI - uses GOOGLE_REDIRECT_URI env var if set, otherwise constructs from FRONTEND_URL
 # This allows flexibility between:
 #   1. Direct backend URL (api.dsgtransport.net)
@@ -494,6 +499,11 @@ async def google_login(request: Request):
     print(f"[Google OAuth] Referer header: {referer}")
     print(f"[Google OAuth] GOOGLE_CLIENT_ID configured: {bool(GOOGLE_CLIENT_ID)}")
     print(f"[Google OAuth] Default redirect URI: {GOOGLE_REDIRECT_URI}")
+
+    frontend_url = os.environ.get("FRONTEND_URL", "https://portal.dsgtransport.net")
+    if not is_google_oauth_configured():
+        print("[Google OAuth] Missing GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET")
+        return RedirectResponse(url=f"{frontend_url}/login?error=google_oauth_not_configured")
     
     # Check for various preview/dev patterns
     is_preview_or_dev = (
@@ -568,6 +578,10 @@ async def google_callback(request: Request, code: str = None, error: str = None)
     
     print(f"[Google OAuth] Using redirect_uri: {redirect_uri}")
     print(f"[Google OAuth] Using frontend_url: {frontend_url}")
+
+    if not is_google_oauth_configured():
+        print("[Google OAuth] Callback received but Google OAuth is not configured")
+        return RedirectResponse(url=f"{frontend_url}/login?error=google_oauth_not_configured")
     
     if error:
         print(f"[Google OAuth] Error from Google: {error}")

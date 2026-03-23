@@ -53,6 +53,9 @@ export const AuthCallback = () => {
           case 'no_account':
             errorMessage = `No account found for ${email || 'this email'}. Please contact your administrator to create an account.`;
             break;
+          case 'google_oauth_not_configured':
+            errorMessage = "Google Sign-In is not configured on the server. Please contact your administrator.";
+            break;
           case 'suspended':
             errorMessage = "Your account is suspended. Please contact your administrator.";
             break;
@@ -72,7 +75,7 @@ export const AuthCallback = () => {
             errorMessage = "Failed to get user information from Google. Please try again.";
             break;
           case 'domain_not_allowed':
-            errorMessage = `Access denied. Your email domain is not authorized to use this system. Only @dsgtransport.net, @dsgtransport.com, and @teamdsgtransport.com emails are allowed.`;
+            errorMessage = `Access denied for ${email || 'this email'}. Please sign in with an approved company account or contact an administrator to be added to the portal.`;
             break;
           default:
             errorMessage = `Authentication failed: ${error}`;
