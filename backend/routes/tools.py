@@ -6,6 +6,7 @@ from bson import ObjectId
 from typing import List, Optional
 from pydantic import BaseModel
 from utils.websocket_manager import notify_tool_deleted, notify_tool_access_change, notify_tool_created, notify_tool_updated
+from utils.tool_credentials import merge_tool_credentials
 
 router = APIRouter()
 
@@ -24,28 +25,6 @@ class ToolCreateWithCredentials(BaseModel):
     icon: str = "Globe"
     url: str = "#"
     credentials: Optional[ToolCredentials] = None
-
-
-def _credential_value_provided(value: Optional[str]) -> bool:
-    if value is None:
-        return False
-    if isinstance(value, str):
-        return value.strip() != ""
-    return True
-
-
-def _merge_tool_credentials(existing_credentials: Optional[dict], incoming_credentials: Optional[ToolCredentials]) -> Optional[dict]:
-    if not incoming_credentials:
-        return existing_credentials
-
-    merged_credentials = dict(existing_credentials or {})
-    provided_credentials = incoming_credentials.dict(exclude_unset=True)
-
-    for field, value in provided_credentials.items():
-        if _credential_value_provided(value):
-            merged_credentials[field] = value
-
-    return merged_credentials or None
 
 @router.get("", response_model=List[dict])
 async def get_tools(current_user: dict = Depends(get_current_user)):
@@ -179,9 +158,9 @@ async def update_tool(tool_id: str, tool_data: ToolCreateWithCredentials, curren
         "url": tool_data.url,
     }
 
-    merged_credentials = _merge_tool_credentials(
+    merged_credentials = merge_tool_credentials(
         tool.get("credentials"),
-        tool_data.credentials,
+        tool_data.credentials.dict(exclude_unset=True) if tool_data.credentials else None,
     )
 
     # Only overwrite stored credentials when non-empty values were provided.
