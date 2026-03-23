@@ -147,16 +147,6 @@ async def add_device(
             detail="This device is already assigned to this user",
         )
 
-    computer_assignment = await db.zoho_devices.find_one({
-        "computer_id": normalized_computer_id,
-        "user_email": {"$ne": normalized_email},
-    })
-    if computer_assignment:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"This device is already assigned to {computer_assignment.get('user_email', 'another user')}",
-        )
-
     now = datetime.now(timezone.utc).isoformat()
     assignment_data = {
         "user_email": normalized_email,
