@@ -27,6 +27,7 @@ async def connect_db():
     await db.tools.create_index("name")
     await db.credentials.create_index([("user_id", 1), ("tool_id", 1)])
     await db.issues.create_index("user_id")
+    await db.zoho_devices.create_index("user_email", unique=True)
     
     print(f"Connected to MongoDB: {DB_NAME}")
     

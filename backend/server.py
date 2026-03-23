@@ -21,6 +21,7 @@ from routes.activity_logs import router as activity_logs_router
 from routes.ip_management import router as ip_management_router
 from routes.secure_access import router as secure_access_router
 from routes.gateway import router as gateway_router
+from routes.zoho import router as zoho_router
 from database import connect_db, close_db
 from utils.websocket_manager import manager
 from utils.security import get_secret_key
@@ -82,6 +83,7 @@ app.include_router(activity_logs_router, prefix="/api/activity-logs", tags=["Act
 app.include_router(ip_management_router, prefix="/api/ip-management", tags=["IP Management"])
 app.include_router(secure_access_router, prefix="/api/secure-access", tags=["Secure Access"])
 app.include_router(gateway_router, prefix="/api/gateway", tags=["Tool Gateway"])
+app.include_router(zoho_router, prefix="/api/zoho", tags=["Zoho"])
 
 @app.get("/api/health")
 async def health_check():
