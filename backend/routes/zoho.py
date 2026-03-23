@@ -86,11 +86,15 @@ async def _sync_zoho_tool_for_user(
 
 @router.get("/devices", response_model=dict)
 async def get_devices(current_user: dict = Depends(require_admin)):
-    """Return all Zoho device assignments."""
+    """Return every Zoho device assignment row without deduplicating by email."""
     db = await get_db()
 
     assignments = []
-    async for assignment in db.zoho_devices.find().sort("user_email", 1):
+    async for assignment in db.zoho_devices.find().sort([
+        ("user_email", 1),
+        ("computer_id", 1),
+        ("created_at", 1),
+    ]):
         assignments.append(_serialize_assignment(assignment))
 
     return {
@@ -255,6 +259,15 @@ async def launch_device(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="User email is required",
+        )
+
+    user_role = current_user.get("role")
+    current_user_email = (current_user.get("email") or "").strip().lower()
+    is_admin = user_role in {"Administrator", "Super Administrator"}
+    if not is_admin and current_user_email != normalized_email:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied",
         )
 
     assignment_filter = {"user_email": normalized_email}
