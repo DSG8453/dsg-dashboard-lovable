@@ -186,6 +186,38 @@ async def update_tool(tool_id: str, tool_data: ToolCreateWithCredentials, curren
         "credentials": merged_credentials
     }
 
+@router.delete("/{tool_id}/credentials")
+async def delete_tool_credentials(tool_id: str, current_user: dict = Depends(require_admin)):
+    """Remove tool credentials (Super Admin only)"""
+    db = await get_db()
+
+    if current_user.get("role") != "Super Administrator":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only Super Administrator can delete tool credentials"
+        )
+
+    try:
+        obj_id = ObjectId(tool_id)
+    except:
+        raise HTTPException(status_code=400, detail="Invalid tool ID")
+
+    tool = await db.tools.find_one({"_id": obj_id})
+    if not tool:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Tool not found"
+        )
+
+    await db.tools.update_one(
+        {"_id": obj_id},
+        {"$set": {"credentials": None}}
+    )
+
+    await notify_tool_updated(tool["name"], tool_id)
+
+    return {"message": f"Credentials removed from tool '{tool['name']}' successfully"}
+
 @router.delete("/{tool_id}")
 async def delete_tool(tool_id: str, current_user: dict = Depends(require_admin)):
     """Delete tool (Super Admin only) - Also removes from all users' allowed_tools"""
