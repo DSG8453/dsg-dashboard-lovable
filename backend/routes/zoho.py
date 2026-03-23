@@ -34,6 +34,11 @@ async def _ensure_zoho_device_indexes(db):
     except Exception:
         pass
 
+    try:
+        await db.zoho_devices.drop_index("user_email")
+    except Exception:
+        pass
+
     await db.zoho_devices.create_index(
         [("user_email", 1), ("computer_id", 1)],
         unique=True,
