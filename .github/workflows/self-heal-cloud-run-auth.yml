@@ -1,0 +1,247 @@
+name: Self-Heal Cloud Run Auth Drift
+
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows:
+      - Deploy Backend to GCP Cloud Run
+    types:
+      - completed
+  schedule:
+    - cron: "23 * * * *"
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: self-heal-cloud-run-auth
+  cancel-in-progress: false
+
+jobs:
+  heal:
+    name: Heal Cloud Run auth/runtime drift
+    if: >-
+      ${{
+        github.event_name != 'workflow_run' ||
+        (github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.event != 'pull_request')
+      }}
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Resolve runtime configuration
+        env:
+          VAR_GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          VAR_GCP_REGION: ${{ vars.GCP_REGION }}
+          VAR_GCP_BACKEND_SERVICE: ${{ vars.GCP_BACKEND_SERVICE }}
+          VAR_FRONTEND_URL: ${{ vars.FRONTEND_URL }}
+          VAR_GOOGLE_REDIRECT_URI: ${{ vars.GOOGLE_REDIRECT_URI }}
+        run: |
+          set -euo pipefail
+          if [ -z "${VAR_GCP_PROJECT_ID}" ]; then
+            echo "Missing repository variable: GCP_PROJECT_ID" >&2
+            exit 1
+          fi
+
+          GCP_REGION="${VAR_GCP_REGION:-us-central1}"
+          GCP_BACKEND_SERVICE="${VAR_GCP_BACKEND_SERVICE:-dsg-backend}"
+          FRONTEND_URL="${VAR_FRONTEND_URL:-https://portal.dsgtransport.net}"
+          GOOGLE_REDIRECT_URI="${VAR_GOOGLE_REDIRECT_URI:-${FRONTEND_URL}/api/auth/google/callback}"
+          SECRET_BINDINGS="MONGO_URL=mongo-uri:latest,MONGO_PASSWORD=mongo-password:latest,JWT_SECRET=jwt-secret:latest,JWT_SECRET_KEY=jwt-secret:latest,ENCRYPTION_KEY=encryption-key:latest,GOOGLE_CLIENT_ID=google-client-id:latest,GOOGLE_CLIENT_SECRET=google-client-secret:latest"
+          ENV_VARS="GCP_PROJECT_ID=${VAR_GCP_PROJECT_ID},DB_NAME=dsg-transport,FRONTEND_URL=${FRONTEND_URL},GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT_URI}"
+
+          echo "GCP_PROJECT_ID=${VAR_GCP_PROJECT_ID}" >> "${GITHUB_ENV}"
+          echo "GCP_REGION=${GCP_REGION}" >> "${GITHUB_ENV}"
+          echo "GCP_BACKEND_SERVICE=${GCP_BACKEND_SERVICE}" >> "${GITHUB_ENV}"
+          echo "FRONTEND_URL=${FRONTEND_URL}" >> "${GITHUB_ENV}"
+          echo "GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT_URI}" >> "${GITHUB_ENV}"
+          echo "SECRET_BINDINGS=${SECRET_BINDINGS}" >> "${GITHUB_ENV}"
+          echo "ENV_VARS=${ENV_VARS}" >> "${GITHUB_ENV}"
+
+      - name: Authenticate to Google Cloud (OIDC)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Capture Cloud Run service metadata
+        env:
+          SERVICE_JSON_PATH: /tmp/service.json
+        run: |
+          set -euo pipefail
+          gcloud run services describe "${GCP_BACKEND_SERVICE}" \
+            --region "${GCP_REGION}" \
+            --project "${GCP_PROJECT_ID}" \
+            --format=json > "${SERVICE_JSON_PATH}"
+
+          SERVICE_ACCOUNT="$(python3 -c 'import json; data=json.load(open("/tmp/service.json", "r", encoding="utf-8")); print(data["spec"]["template"]["spec"]["serviceAccountName"])')"
+          SERVICE_URL="$(python3 -c 'import json; data=json.load(open("/tmp/service.json", "r", encoding="utf-8")); print(data["status"]["url"])')"
+
+          echo "SERVICE_ACCOUNT=${SERVICE_ACCOUNT}" >> "${GITHUB_ENV}"
+          echo "SERVICE_URL=${SERVICE_URL}" >> "${GITHUB_ENV}"
+
+      - name: Ensure runtime service account can access required secrets
+        run: |
+          set -euo pipefail
+          required_secrets=(
+            google-client-id
+            google-client-secret
+            mongo-uri
+            mongo-password
+            jwt-secret
+            encryption-key
+          )
+
+          for secret_name in "${required_secrets[@]}"; do
+            binding_count="$(gcloud secrets get-iam-policy "${secret_name}" \
+              --project "${GCP_PROJECT_ID}" \
+              --flatten="bindings[].members" \
+              --format="value(bindings.members)" \
+              --filter="bindings.role:roles/secretmanager.secretAccessor AND bindings.members:serviceAccount:${SERVICE_ACCOUNT}" | wc -l | tr -d ' ')"
+
+            if [ "${binding_count}" = "0" ]; then
+              echo "Granting Secret Manager access for ${secret_name} to ${SERVICE_ACCOUNT}"
+              gcloud secrets add-iam-policy-binding "${secret_name}" \
+                --project "${GCP_PROJECT_ID}" \
+                --member="serviceAccount:${SERVICE_ACCOUNT}" \
+                --role="roles/secretmanager.secretAccessor"
+            else
+              echo "Secret access already configured for ${secret_name}"
+            fi
+          done
+
+      - name: Detect Cloud Run runtime drift
+        id: drift
+        run: |
+          set -euo pipefail
+          cat > /tmp/check_drift.py <<'PY'
+          import json
+          import os
+
+          with open("/tmp/service.json", "r", encoding="utf-8") as fh:
+              data = json.load(fh)
+
+          env_entries = data["spec"]["template"]["spec"]["containers"][0].get("env", [])
+          env_map = {}
+          for entry in env_entries:
+              name = entry["name"]
+              if "value" in entry:
+                  env_map[name] = {"type": "value", "value": entry["value"]}
+              elif "valueFrom" in entry:
+                  ref = entry["valueFrom"]["secretKeyRef"]
+                  env_map[name] = {
+                      "type": "secret",
+                      "name": ref["name"],
+                      "key": ref["key"],
+                  }
+
+          required_values = {
+              "GCP_PROJECT_ID": os.environ["GCP_PROJECT_ID"],
+              "DB_NAME": "dsg-transport",
+              "FRONTEND_URL": os.environ["FRONTEND_URL"],
+              "GOOGLE_REDIRECT_URI": os.environ["GOOGLE_REDIRECT_URI"],
+          }
+          required_secrets = {
+              "MONGO_URL": ("mongo-uri", "latest"),
+              "MONGO_PASSWORD": ("mongo-password", "latest"),
+              "JWT_SECRET": ("jwt-secret", "latest"),
+              "JWT_SECRET_KEY": ("jwt-secret", "latest"),
+              "ENCRYPTION_KEY": ("encryption-key", "latest"),
+              "GOOGLE_CLIENT_ID": ("google-client-id", "latest"),
+              "GOOGLE_CLIENT_SECRET": ("google-client-secret", "latest"),
+          }
+
+          drift_messages = []
+
+          for name, expected in required_values.items():
+              actual = env_map.get(name)
+              if not actual or actual.get("type") != "value" or actual.get("value") != expected:
+                  drift_messages.append(f"{name} value drift")
+
+          for name, (secret_name, secret_version) in required_secrets.items():
+              actual = env_map.get(name)
+              if (
+                  not actual
+                  or actual.get("type") != "secret"
+                  or actual.get("name") != secret_name
+                  or actual.get("key") != secret_version
+              ):
+                  drift_messages.append(f"{name} secret binding drift")
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
+              fh.write(f"needs_update={'true' if drift_messages else 'false'}\n")
+              if drift_messages:
+                  fh.write(f"drift_reason={'; '.join(drift_messages)}\n")
+          PY
+          python3 /tmp/check_drift.py
+
+      - name: Probe Google OAuth redirect health
+        id: oauth
+        run: |
+          set -euo pipefail
+          LOGIN_URL="${FRONTEND_URL}/api/auth/google/login"
+          REDIRECT_LOCATION="$(curl -fsSI "${LOGIN_URL}" | awk 'BEGIN{IGNORECASE=1} /^location: / {sub(/\r$/, "", $2); print $2}')"
+
+          if [ -z "${REDIRECT_LOCATION}" ]; then
+            echo "healthy=false" >> "${GITHUB_OUTPUT}"
+            echo "reason=Missing redirect from Google login endpoint" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          if [[ "${REDIRECT_LOCATION}" == *"client_id=None"* ]] || [[ "${REDIRECT_LOCATION}" == *"error=google_oauth_not_configured"* ]]; then
+            echo "healthy=false" >> "${GITHUB_OUTPUT}"
+            echo "reason=Google OAuth redirect misconfigured" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          echo "healthy=true" >> "${GITHUB_OUTPUT}"
+
+      - name: Repair Cloud Run runtime configuration
+        if: steps.drift.outputs.needs_update == 'true' || steps.oauth.outputs.healthy != 'true'
+        run: |
+          set -euo pipefail
+          echo "Repairing Cloud Run config drift..."
+          if [ "${{ steps.drift.outputs.needs_update }}" = "true" ]; then
+            echo "Detected drift: ${{ steps.drift.outputs.drift_reason }}"
+          fi
+          if [ "${{ steps.oauth.outputs.healthy }}" != "true" ]; then
+            echo "Detected OAuth issue: ${{ steps.oauth.outputs.reason }}"
+          fi
+
+          gcloud run services update "${GCP_BACKEND_SERVICE}" \
+            --region "${GCP_REGION}" \
+            --project "${GCP_PROJECT_ID}" \
+            --update-env-vars "${ENV_VARS}" \
+            --update-secrets "${SECRET_BINDINGS}"
+
+      - name: Wait for healthy backend
+        run: |
+          set -euo pipefail
+          HEALTH_URL="${SERVICE_URL}/api/health"
+          for attempt in 1 2 3 4 5; do
+            if curl -fsS "${HEALTH_URL}" > /dev/null; then
+              echo "Backend health check passed."
+              exit 0
+            fi
+            sleep $((attempt * 3))
+          done
+          echo "Backend health check failed." >&2
+          exit 1
+
+      - name: Verify Google OAuth redirect after self-heal
+        run: |
+          set -euo pipefail
+          LOGIN_URL="${FRONTEND_URL}/api/auth/google/login"
+          REDIRECT_LOCATION="$(curl -fsSI "${LOGIN_URL}" | awk 'BEGIN{IGNORECASE=1} /^location: / {sub(/\r$/, "", $2); print $2}')"
+          if [ -z "${REDIRECT_LOCATION}" ]; then
+            echo "Google OAuth login endpoint did not return a redirect" >&2
+            exit 1
+          fi
+          if [[ "${REDIRECT_LOCATION}" == *"client_id=None"* ]] || [[ "${REDIRECT_LOCATION}" == *"error=google_oauth_not_configured"* ]]; then
+            echo "Google OAuth redirect is still misconfigured: ${REDIRECT_LOCATION}" >&2
+            exit 1
+          fi
+          echo "Google OAuth redirect looks healthy."

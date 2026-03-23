@@ -4,6 +4,7 @@ on:
   workflow_run:
     workflows:
       - Deploy Backend to GCP Cloud Run
+      - Self-Heal Cloud Run Auth Drift
       - Purge Cloudflare Cache
       - Scheduled MongoDB Export Backup
       - Security Posture Checks
