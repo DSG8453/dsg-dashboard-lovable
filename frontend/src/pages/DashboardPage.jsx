@@ -267,6 +267,24 @@ export const DashboardPage = ({ currentUser }) => {
   const isZohoLaunchTool = (tool) =>
     typeof tool?.url === "string" && tool.url.includes("/api/zoho/launch/");
 
+  const getZohoLaunchPath = (url) => {
+    if (typeof url !== "string" || !url) {
+      return "";
+    }
+
+    try {
+      const parsedUrl = new URL(url);
+      return `${parsedUrl.pathname}${parsedUrl.search}`;
+    } catch {
+      const launchPathIndex = url.indexOf("/api/zoho/launch/");
+      if (launchPathIndex === -1) {
+        return url;
+      }
+
+      return url.slice(launchPathIndex);
+    }
+  };
+
   const isOpenToolButtonClick = (event) => {
     const button = event.target?.closest?.("button");
     if (!button) {
@@ -291,7 +309,8 @@ export const DashboardPage = ({ currentUser }) => {
     }
 
     try {
-      const response = await fetch(tool.url, {
+      const zohoLaunchPath = getZohoLaunchPath(tool.url);
+      const response = await fetch(zohoLaunchPath, {
         method: "GET",
         headers: {
           Authorization: `Bearer ${token}`,
