@@ -25,6 +25,28 @@ class ToolCreateWithCredentials(BaseModel):
     url: str = "#"
     credentials: Optional[ToolCredentials] = None
 
+
+def _credential_value_provided(value: Optional[str]) -> bool:
+    if value is None:
+        return False
+    if isinstance(value, str):
+        return value.strip() != ""
+    return True
+
+
+def _merge_tool_credentials(existing_credentials: Optional[dict], incoming_credentials: Optional[ToolCredentials]) -> Optional[dict]:
+    if not incoming_credentials:
+        return existing_credentials
+
+    merged_credentials = dict(existing_credentials or {})
+    provided_credentials = incoming_credentials.dict(exclude_unset=True)
+
+    for field, value in provided_credentials.items():
+        if _credential_value_provided(value):
+            merged_credentials[field] = value
+
+    return merged_credentials or None
+
 @router.get("", response_model=List[dict])
 async def get_tools(current_user: dict = Depends(get_current_user)):
     """Get all tools - credentials ONLY visible to Super Admin"""
@@ -156,10 +178,15 @@ async def update_tool(tool_id: str, tool_data: ToolCreateWithCredentials, curren
         "icon": tool_data.icon,
         "url": tool_data.url,
     }
-    
-    # Update credentials if provided
-    if tool_data.credentials:
-        update_data["credentials"] = tool_data.credentials.dict()
+
+    merged_credentials = _merge_tool_credentials(
+        tool.get("credentials"),
+        tool_data.credentials,
+    )
+
+    # Only overwrite stored credentials when non-empty values were provided.
+    if merged_credentials != tool.get("credentials"):
+        update_data["credentials"] = merged_credentials
     
     await db.tools.update_one(
         {"_id": obj_id},
@@ -176,8 +203,8 @@ async def update_tool(tool_id: str, tool_data: ToolCreateWithCredentials, curren
         "description": tool_data.description,
         "icon": tool_data.icon,
         "url": tool_data.url,
-        "has_credentials": bool(tool_data.credentials),
-        "credentials": tool_data.credentials.dict() if tool_data.credentials else None
+        "has_credentials": bool(merged_credentials),
+        "credentials": merged_credentials
     }
 
 @router.delete("/{tool_id}")
