@@ -46,6 +46,11 @@ const EMPTY_FORM = {
   device_name: "",
 };
 
+const compareAssignments = (left, right) =>
+  left.user_email.localeCompare(right.user_email, undefined, {
+    sensitivity: "base",
+  });
+
 const normalizeAssignment = (assignment) => {
   if (!assignment || typeof assignment !== "object") {
     return null;
@@ -81,13 +86,20 @@ const normalizeAssignment = (assignment) => {
 const extractAssignments = (payload) => {
   const collection = Array.isArray(payload)
     ? payload
-    : payload?.devices || payload?.assignments || payload?.items || payload?.data || [];
+    : payload?.devices ||
+      payload?.assignments ||
+      payload?.items ||
+      payload?.data ||
+      [];
 
   if (!Array.isArray(collection)) {
     return [];
   }
 
-  return collection.map(normalizeAssignment).filter(Boolean);
+  return collection
+    .map(normalizeAssignment)
+    .filter(Boolean)
+    .sort(compareAssignments);
 };
 
 const getErrorMessage = (error, fallbackMessage) => {
@@ -153,7 +165,8 @@ export const ZohoDeviceManagerPage = () => {
 
       try {
         const data = await zohoAPI.getDevices();
-        setAssignments(extractAssignments(data));
+        const nextAssignments = extractAssignments(data);
+        setAssignments(nextAssignments);
       } catch (error) {
         toast.error(getErrorMessage(error, "Failed to load Zoho assignments"));
       } finally {
@@ -544,7 +557,9 @@ export const ZohoDeviceManagerPage = () => {
                     return (
                       <TableRow key={assignment.user_email} className="hover:bg-muted/30">
                         <TableCell className="font-medium">{assignment.user_email}</TableCell>
-                        <TableCell>{assignment.device_name || "Unnamed device"}</TableCell>
+                        <TableCell className="max-w-[220px] truncate" title={assignment.device_name || "Unnamed device"}>
+                          {assignment.device_name || "Unnamed device"}
+                        </TableCell>
                         <TableCell className="font-mono text-sm">
                           {assignment.computer_id || "Not set"}
                         </TableCell>

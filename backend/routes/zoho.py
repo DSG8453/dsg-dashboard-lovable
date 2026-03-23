@@ -8,6 +8,32 @@ from routes.auth import require_admin
 router = APIRouter()
 
 
+def _serialize_assignment(assignment: dict) -> dict:
+    return {
+        "user_email": assignment.get("user_email", ""),
+        "computer_id": assignment.get("computer_id", ""),
+        "device_name": assignment.get("device_name", ""),
+        "created_at": assignment.get("created_at"),
+        "updated_at": assignment.get("updated_at"),
+        "updated_by": assignment.get("updated_by"),
+    }
+
+
+@router.get("/devices", response_model=dict)
+async def get_devices(current_user: dict = Depends(require_admin)):
+    """Return all Zoho device assignments."""
+    db = await get_db()
+
+    assignments = []
+    async for assignment in db.zoho_devices.find().sort("user_email", 1):
+        assignments.append(_serialize_assignment(assignment))
+
+    return {
+        "devices": assignments,
+        "count": len(assignments),
+    }
+
+
 @router.post("/devices", response_model=dict)
 async def add_device(
     user_email: str = Query(...),
@@ -63,9 +89,5 @@ async def add_device(
 
     return {
         "message": "Zoho device assignment saved successfully",
-        "device": {
-            "user_email": assignment["user_email"],
-            "computer_id": assignment.get("computer_id", ""),
-            "device_name": assignment.get("device_name", ""),
-        },
+        "device": _serialize_assignment(assignment),
     }
