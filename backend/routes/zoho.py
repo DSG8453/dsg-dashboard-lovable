@@ -3,7 +3,6 @@ from datetime import datetime, timezone
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-import database as database_module
 from database import get_db
 from routes.auth import get_current_user, require_admin
 
@@ -26,33 +25,6 @@ async def get_zoho_token():
             }
         )
     return response.json().get("access_token")
-
-
-async def _ensure_zoho_device_indexes(db):
-    await db.zoho_devices.drop_indexes()
-
-    await db.zoho_devices.create_index(
-        [("user_email", 1), ("computer_id", 1)],
-        unique=True,
-    )
-
-
-def _patch_database_connect_db():
-    if getattr(database_module.connect_db, "_zoho_index_patch_applied", False):
-        return
-
-    original_connect_db = database_module.connect_db
-
-    async def connect_db_with_zoho_indexes():
-        await original_connect_db()
-        db = await database_module.get_db()
-        await _ensure_zoho_device_indexes(db)
-
-    connect_db_with_zoho_indexes._zoho_index_patch_applied = True
-    database_module.connect_db = connect_db_with_zoho_indexes
-
-
-_patch_database_connect_db()
 
 
 def _serialize_assignment(assignment: dict) -> dict:
