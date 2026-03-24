@@ -69,22 +69,6 @@ const iconOptions = [
   { name: "FolderOpen", icon: FolderOpen },
 ];
 
-const normalizeZohoSessionUrl = (sessionUrl) => {
-  if (typeof sessionUrl !== "string" || !sessionUrl) {
-    return "";
-  }
-
-  if (sessionUrl.startsWith("http://") || sessionUrl.startsWith("https://")) {
-    return sessionUrl;
-  }
-
-  if (sessionUrl.startsWith("/")) {
-    return `https://assist.zoho.com${sessionUrl}`;
-  }
-
-  return `https://assist.zoho.com/${sessionUrl.replace(/^\/+/, "")}`;
-};
-
 const categoryOptions = [
   "Security",
   "Support",
@@ -324,20 +308,9 @@ export const DashboardPage = ({ currentUser }) => {
       return;
     }
 
-    const pendingWindow = window.open("about:blank", "_blank");
-
     try {
       const zohoLaunchPath = getZohoLaunchPath(tool.url);
-      const backendUrl = (process.env.REACT_APP_BACKEND_URL || "").replace(/\/$/, "");
-      const fetchUrl = backendUrl && zohoLaunchPath.startsWith("/")
-        ? `${backendUrl}${zohoLaunchPath}`
-        : zohoLaunchPath;
-
-      console.log("Tool URL:", tool.url);
-      console.log("Is Zoho:", tool.url?.includes('/api/zoho/launch/'));
-      console.log("Fetching:", fetchUrl);
-
-      const response = await fetch(fetchUrl, {
+      const response = await fetch(zohoLaunchPath, {
         method: "GET",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -349,21 +322,12 @@ export const DashboardPage = ({ currentUser }) => {
         throw new Error(data.detail || `API Error: ${response.status}`);
       }
 
-      const sessionUrl = normalizeZohoSessionUrl(data?.session_url);
-
-      if (!sessionUrl) {
+      if (!data?.session_url) {
         throw new Error("Zoho session URL is missing from the launch response");
       }
 
-      if (pendingWindow) {
-        pendingWindow.location.replace(sessionUrl);
-      } else {
-        window.open(sessionUrl, "_blank", "noopener,noreferrer");
-      }
+      window.open(data.session_url, "_blank", "noopener,noreferrer");
     } catch (error) {
-      if (pendingWindow) {
-        pendingWindow.close();
-      }
       toast.error("Failed to launch Zoho tool", {
         description: error.message || "Please try again",
       });
