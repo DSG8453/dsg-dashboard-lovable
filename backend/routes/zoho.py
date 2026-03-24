@@ -337,11 +337,11 @@ async def launch_device(
         )
 
     session_url = (
-        payload.get("representation", {}).get("connect_uri")
-        or payload.get("connect_uri")
+        payload.get("representation", {}).get("technician_uri")
         or payload.get("technician_uri")
         or payload.get("session_url")
-        or payload.get("representation", {}).get("technician_uri")
+        or payload.get("representation", {}).get("connect_uri")
+        or payload.get("connect_uri")
     )
     if not session_url:
         raise HTTPException(
