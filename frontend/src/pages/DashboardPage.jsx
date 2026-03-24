@@ -310,7 +310,16 @@ export const DashboardPage = ({ currentUser }) => {
 
     try {
       const zohoLaunchPath = getZohoLaunchPath(tool.url);
-      const response = await fetch(zohoLaunchPath, {
+      const backendUrl = (process.env.REACT_APP_BACKEND_URL || "").replace(/\/$/, "");
+      const fetchUrl = backendUrl && zohoLaunchPath.startsWith("/")
+        ? `${backendUrl}${zohoLaunchPath}`
+        : zohoLaunchPath;
+
+      console.log("Tool URL:", tool.url);
+      console.log("Is Zoho:", tool.url?.includes('/api/zoho/launch/'));
+      console.log("Fetching:", fetchUrl);
+
+      const response = await fetch(fetchUrl, {
         method: "GET",
         headers: {
           Authorization: `Bearer ${token}`,
