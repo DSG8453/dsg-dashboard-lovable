@@ -321,6 +321,8 @@ async def launch_device(
     except ValueError:
         payload = {}
 
+    print("ZOHO RESPONSE:", payload)
+
     if response.status_code >= 400:
         detail = (
             payload.get("message")
@@ -335,7 +337,9 @@ async def launch_device(
         )
 
     session_url = (
-        payload.get("technician_uri")
+        payload.get("representation", {}).get("connect_uri")
+        or payload.get("connect_uri")
+        or payload.get("technician_uri")
         or payload.get("session_url")
         or payload.get("representation", {}).get("technician_uri")
     )
