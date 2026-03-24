@@ -349,6 +349,9 @@ async def launch_device(
             detail="Zoho Assist response did not include technician_uri",
         )
 
+    if isinstance(session_url, str) and session_url.startswith("/"):
+        session_url = f"https://assist.zoho.com{session_url}"
+
     return {
         "user_email": normalized_email,
         "computer_id": computer_id,
