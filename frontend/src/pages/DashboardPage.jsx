@@ -308,9 +308,20 @@ export const DashboardPage = ({ currentUser }) => {
       return;
     }
 
+    const pendingWindow = window.open("", "_blank", "noopener,noreferrer");
+
     try {
       const zohoLaunchPath = getZohoLaunchPath(tool.url);
-      const response = await fetch(zohoLaunchPath, {
+      const backendUrl = (process.env.REACT_APP_BACKEND_URL || "").replace(/\/$/, "");
+      const fetchUrl = backendUrl && zohoLaunchPath.startsWith("/")
+        ? `${backendUrl}${zohoLaunchPath}`
+        : zohoLaunchPath;
+
+      console.log("Tool URL:", tool.url);
+      console.log("Is Zoho:", tool.url?.includes('/api/zoho/launch/'));
+      console.log("Fetching:", fetchUrl);
+
+      const response = await fetch(fetchUrl, {
         method: "GET",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -326,8 +337,15 @@ export const DashboardPage = ({ currentUser }) => {
         throw new Error("Zoho session URL is missing from the launch response");
       }
 
-      window.open(data.session_url, "_blank", "noopener,noreferrer");
+      if (pendingWindow) {
+        pendingWindow.location.href = data.session_url;
+      } else {
+        window.open(data.session_url, "_blank", "noopener,noreferrer");
+      }
     } catch (error) {
+      if (pendingWindow) {
+        pendingWindow.close();
+      }
       toast.error("Failed to launch Zoho tool", {
         description: error.message || "Please try again",
       });
