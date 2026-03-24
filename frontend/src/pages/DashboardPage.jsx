@@ -69,6 +69,22 @@ const iconOptions = [
   { name: "FolderOpen", icon: FolderOpen },
 ];
 
+const normalizeZohoSessionUrl = (sessionUrl) => {
+  if (typeof sessionUrl !== "string" || !sessionUrl) {
+    return "";
+  }
+
+  if (sessionUrl.startsWith("http://") || sessionUrl.startsWith("https://")) {
+    return sessionUrl;
+  }
+
+  if (sessionUrl.startsWith("/")) {
+    return `https://assist.zoho.com${sessionUrl}`;
+  }
+
+  return `https://assist.zoho.com/${sessionUrl.replace(/^\/+/, "")}`;
+};
+
 const categoryOptions = [
   "Security",
   "Support",
@@ -308,7 +324,7 @@ export const DashboardPage = ({ currentUser }) => {
       return;
     }
 
-    const pendingWindow = window.open("", "_blank", "noopener,noreferrer");
+    const pendingWindow = window.open("about:blank", "_blank");
 
     try {
       const zohoLaunchPath = getZohoLaunchPath(tool.url);
@@ -333,14 +349,16 @@ export const DashboardPage = ({ currentUser }) => {
         throw new Error(data.detail || `API Error: ${response.status}`);
       }
 
-      if (!data?.session_url) {
+      const sessionUrl = normalizeZohoSessionUrl(data?.session_url);
+
+      if (!sessionUrl) {
         throw new Error("Zoho session URL is missing from the launch response");
       }
 
       if (pendingWindow) {
-        pendingWindow.location.href = data.session_url;
+        pendingWindow.location.replace(sessionUrl);
       } else {
-        window.open(data.session_url, "_blank", "noopener,noreferrer");
+        window.open(sessionUrl, "_blank", "noopener,noreferrer");
       }
     } catch (error) {
       if (pendingWindow) {

@@ -312,13 +312,21 @@ const getSessionUrl = (payload) => {
   }
 
   const sessionUrl = payload?.session_url;
+  if (typeof sessionUrl !== "string" || !sessionUrl.trim()) {
+    return null;
+  }
+
+  const normalizedUrl = sessionUrl.trim();
   if (
-    typeof sessionUrl === "string" &&
-    (sessionUrl.startsWith("http://") ||
-      sessionUrl.startsWith("https://") ||
-      sessionUrl.startsWith("/"))
+    normalizedUrl.startsWith("http://") ||
+    normalizedUrl.startsWith("https://") ||
+    normalizedUrl.startsWith("/")
   ) {
-    return sessionUrl;
+    return normalizedUrl;
+  }
+
+  if (normalizedUrl.startsWith("assist.zoho.com/")) {
+    return `https://${normalizedUrl}`;
   }
 
   return null;
@@ -571,6 +579,7 @@ export const ZohoDeviceManagerPage = () => {
   const handleLaunch = async (assignment) => {
     const assignmentKey = getAssignmentKey(assignment);
     setLaunchingAssignmentKey(assignmentKey);
+    const pendingWindow = window.open("", "_blank");
 
     try {
       const response = await fetchZohoEndpoint(
@@ -581,13 +590,23 @@ export const ZohoDeviceManagerPage = () => {
       const sessionUrl = getSessionUrl(response);
 
       if (sessionUrl) {
-        window.open(sessionUrl, "_blank");
+        if (pendingWindow) {
+          pendingWindow.location.href = sessionUrl;
+        } else {
+          window.open(sessionUrl, "_blank");
+        }
         toast.success(`Launching Zoho for ${assignment.user_email}`);
         return;
       }
 
+      if (pendingWindow) {
+        pendingWindow.close();
+      }
       toast.error("Zoho session URL is missing from the launch response");
     } catch (error) {
+      if (pendingWindow) {
+        pendingWindow.close();
+      }
       toast.error(getErrorMessage(error, "Failed to launch Zoho"));
     } finally {
       setLaunchingAssignmentKey(null);
